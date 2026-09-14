@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="process_text_action_label">OACLIX</string>
+    <string name="process_text_title">OACLIX · Recientes</string>
+    <string name="process_text_subtitle">Toca un reciente para usarlo. Si acabas de copiar un texto grande, OACLIX lo guarda al abrirse.</string>
+    <string name="process_text_read_only">Toca un reciente para dejarlo listo para Pegar. Si acabas de copiar un texto grande, OACLIX lo guarda al abrirse.</string>
+    <string name="process_text_empty">Todavía no hay contenido reciente en Mi portapapeles.</string>
+    <string name="process_text_copy_selection">Copiar selección actual</string>
+    <string name="process_text_copy_selection_hint">Usa OACLIX para copiar lo que acabas de seleccionar. Android puede limitar esta vía a unos 100.000 caracteres.</string>
+    <string name="process_text_large_clipboard_ready">✓ Texto grande copiado listo · %1$s</string>
+    <string name="process_text_clipboard_too_large">Lo copiado supera el límite local actual de 384 KB</string>
+    <string name="process_text_clipboard_failed">No se pudo guardar lo copiado</string>
+    <string name="process_text_file_preview">📄 %1$s.txt</string>
+    <string name="process_text_file_meta">TXT · %1$s · %2$s</string>
+    <string name="process_text_image_title">Imagen</string>
+    <string name="process_text_image_meta">%1$s · %2$s</string>
+    <string name="process_text_image_copied">Imagen copiada · lista para Pegar</string>
+    <string name="process_text_recent_failed">No se pudo preparar este reciente</string>
+    <string name="process_text_hint">Máximo 5 recientes · toca fuera para cerrar</string>
+    <string name="process_text_unnamed_text">Texto guardado</string>
+    <string name="process_text_now">Ahora mismo</string>
+    <string name="process_text_minutes_ago">Hace %1$d min</string>
+    <string name="process_text_hours_ago">Hace %1$d h</string>
+    <string name="process_text_copied">Copiado con OACLIX · listo para Pegar</string>
+    <string name="process_text_copy_failed">No se pudo copiar el texto seleccionado</string>
+</resources>

@@ -1,0 +1,1 @@
+export const OACLIX_BUILD_VERSION = 'v70'

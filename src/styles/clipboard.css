@@ -1,0 +1,100 @@
+.clip-composer {
+  max-width: 840px;
+  margin: 0 auto 14px;
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface-strong);
+  box-shadow: inset 0 1px rgba(255,255,255,.03);
+}
+
+.clip-composer__label {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.clip-composer textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 88px;
+  max-height: 260px;
+  padding: 12px 13px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  color: var(--text);
+  font: inherit;
+  line-height: 1.45;
+  outline: none;
+}
+
+.clip-composer textarea:focus {
+  border-color: rgba(145,116,255,.46);
+  box-shadow: 0 0 0 3px rgba(127,93,255,.08);
+}
+
+.clip-composer textarea:disabled {
+  opacity: .58;
+  cursor: not-allowed;
+}
+
+.clip-composer__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.clip-composer__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.clip-composer__hint {
+  color: var(--muted-2);
+  font-size: 10px;
+}
+
+.clip-composer__status,
+.clip-composer__error {
+  margin: 0;
+  font-size: 11px;
+}
+
+.clip-composer__status {
+  color: var(--muted);
+}
+
+.clip-composer__error {
+  color: var(--danger);
+}
+
+.clip-composer .ghost-button:disabled,
+.clipboard-head__status .action-pill:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+@media (max-width: 640px) {
+  .clip-composer { padding: 12px; border-radius: 16px; }
+  .clip-composer__footer { align-items: flex-end; }
+  .clip-composer__actions { width: 100%; }
+  .clip-composer .ghost-button { min-width: 120px; justify-content: center; }
+  .clipboard-head__status {
+    max-width: none;
+    flex: 0 0 auto;
+    gap: 6px;
+    white-space: nowrap;
+  }
+  .clipboard-head__status > span:not(.status-dot) { white-space: nowrap; }
+  .clipboard-head__status .action-pill { flex: 0 0 auto; }
+}

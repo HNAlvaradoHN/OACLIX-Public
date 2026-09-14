@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Oaclix" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowBackground">@color/oaclix_bg</item>
+        <item name="android:statusBarColor">@color/oaclix_bg</item>
+        <item name="android:navigationBarColor">@color/oaclix_bg</item>
+        <item name="android:colorAccent">@color/oaclix_accent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+
+    <style name="Theme.Oaclix.Share" parent="android:style/Theme.Material.Dialog.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:colorAccent">@color/oaclix_accent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowCloseOnTouchOutside">false</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:backgroundDimAmount">0.72</item>
+        <item name="android:windowElevation">22dp</item>
+        <item name="android:windowMinWidthMajor">92%</item>
+        <item name="android:windowMinWidthMinor">92%</item>
+    </style>
+
+    <style name="Widget.Oaclix.Button.Base" parent="android:style/Widget.Material.Button">
+        <item name="android:minHeight">48dp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:paddingStart">16dp</item>
+        <item name="android:paddingEnd">16dp</item>
+        <item name="android:gravity">center</item>
+    </style>
+
+    <style name="Widget.Oaclix.Button.Primary" parent="Widget.Oaclix.Button.Base">
+        <item name="android:background">@drawable/share_primary_button</item>
+        <item name="android:textColor">@color/oaclix_text</item>
+    </style>
+
+    <style name="Widget.Oaclix.Button.Secondary" parent="Widget.Oaclix.Button.Base">
+        <item name="android:background">@drawable/share_secondary_button</item>
+        <item name="android:textColor">@color/oaclix_text</item>
+    </style>
+
+    <style name="Widget.Oaclix.Button.Danger" parent="Widget.Oaclix.Button.Secondary">
+        <item name="android:textColor">@color/oaclix_danger</item>
+    </style>
+</resources>

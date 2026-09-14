@@ -1,0 +1,177 @@
+:root[data-theme='dark'] {
+  --edge-neutral: rgba(137, 158, 255, .3);
+  --edge-neutral-soft: rgba(91, 116, 255, .11);
+  --edge-violet: rgba(145, 103, 255, .52);
+  --edge-cyan: rgba(72, 198, 255, .5);
+  --edge-emerald: rgba(72, 222, 177, .44);
+  --edge-rose: rgba(255, 100, 166, .44);
+  --edge-highlight: rgba(255, 255, 255, .1);
+  --edge-shadow: rgba(0, 0, 0, .48);
+}
+
+:root[data-theme='dark'] .icon-button,
+:root[data-theme='dark'] .sync-chip,
+:root[data-theme='dark'] .ghost-button,
+:root[data-theme='dark'] .favorite-button,
+:root[data-theme='dark'] .action-pill,
+:root[data-theme='dark'] .back-button,
+:root[data-theme='dark'] .general-card__arrow,
+:root[data-theme='dark'] .room-card__arrow,
+:root[data-theme='dark'] .room-card__icon,
+:root[data-theme='dark'] .general-card__icon,
+:root[data-theme='dark'] .room-title__icon,
+:root[data-theme='dark'] .route-card__icon,
+:root[data-theme='dark'] .device-row__icon {
+  border-color: var(--edge-neutral);
+  box-shadow:
+    inset 0 1px 0 var(--edge-highlight),
+    inset 0 -1px 0 var(--edge-shadow),
+    0 0 0 1px var(--edge-neutral-soft),
+    0 0 14px rgba(82, 126, 255, .08),
+    0 8px 20px rgba(0, 0, 0, .2);
+}
+
+:root[data-theme='dark'] .general-card__icon {
+  border-color: rgba(154, 116, 255, .55);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.14),
+    inset 0 -1px 0 rgba(24,13,58,.5),
+    0 0 0 1px rgba(125,91,255,.12),
+    0 0 18px rgba(124,86,255,.19),
+    0 10px 24px rgba(58,44,174,.2);
+}
+
+:root[data-theme='dark'] .general-card {
+  border-color: var(--edge-violet);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.09),
+    inset 0 -1px 0 rgba(0,0,0,.5),
+    0 0 0 1px rgba(116,88,255,.08),
+    0 0 22px rgba(118,82,255,.14),
+    0 18px 40px rgba(0,0,0,.34);
+}
+
+:root[data-theme='dark'] .room-card {
+  border-color: rgba(133, 151, 220, .28);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.075),
+    inset 0 -1px 0 rgba(0,0,0,.46),
+    0 0 0 1px rgba(104,124,197,.045),
+    0 12px 30px rgba(0,0,0,.3);
+}
+
+:root[data-theme='dark'] .room-card--violet {
+  border-color: var(--edge-violet);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), inset 0 -1px 0 rgba(0,0,0,.46), 0 0 0 1px rgba(132,92,255,.07), 0 0 17px rgba(132,92,255,.11), 0 12px 30px rgba(0,0,0,.3);
+}
+
+:root[data-theme='dark'] .room-card--cyan {
+  border-color: var(--edge-cyan);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), inset 0 -1px 0 rgba(0,0,0,.46), 0 0 0 1px rgba(72,198,255,.07), 0 0 17px rgba(72,198,255,.1), 0 12px 30px rgba(0,0,0,.3);
+}
+
+:root[data-theme='dark'] .room-card--emerald {
+  border-color: var(--edge-emerald);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), inset 0 -1px 0 rgba(0,0,0,.46), 0 0 0 1px rgba(72,222,177,.065), 0 0 17px rgba(72,222,177,.09), 0 12px 30px rgba(0,0,0,.3);
+}
+
+:root[data-theme='dark'] .room-card--rose {
+  border-color: var(--edge-rose);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), inset 0 -1px 0 rgba(0,0,0,.46), 0 0 0 1px rgba(255,100,166,.065), 0 0 17px rgba(255,100,166,.09), 0 12px 30px rgba(0,0,0,.3);
+}
+
+:root[data-theme='dark'] .clip-card,
+:root[data-theme='dark'] .side-panel,
+:root[data-theme='dark'] .appearance-panel,
+:root[data-theme='dark'] .image-mock {
+  border-color: rgba(134, 151, 218, .28);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.075),
+    inset 0 -1px 0 rgba(0,0,0,.44),
+    0 0 0 1px rgba(100,119,190,.045),
+    0 0 16px rgba(79,112,218,.065),
+    0 14px 34px rgba(0,0,0,.3);
+}
+
+:root[data-theme='dark'] .route-card {
+  border-color: rgba(77, 224, 180, .32);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.075), inset 0 -1px 0 rgba(0,0,0,.4), 0 0 14px rgba(72,222,177,.07);
+}
+
+:root[data-theme='dark'] .device-row {
+  border-color: rgba(133,151,220,.2);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.055), inset 0 -1px 0 rgba(0,0,0,.38);
+}
+
+:root[data-theme='light'] {
+  --edge-neutral-light: rgba(78, 93, 128, .22);
+  --edge-highlight-light: rgba(255,255,255,.98);
+  --edge-shadow-light: rgba(60, 75, 108, .12);
+}
+
+:root[data-theme='light'] .icon-button,
+:root[data-theme='light'] .sync-chip,
+:root[data-theme='light'] .ghost-button,
+:root[data-theme='light'] .favorite-button,
+:root[data-theme='light'] .action-pill,
+:root[data-theme='light'] .back-button,
+:root[data-theme='light'] .general-card__arrow,
+:root[data-theme='light'] .room-card__arrow,
+:root[data-theme='light'] .room-card__icon,
+:root[data-theme='light'] .general-card__icon,
+:root[data-theme='light'] .room-title__icon,
+:root[data-theme='light'] .route-card__icon,
+:root[data-theme='light'] .device-row__icon {
+  border-color: var(--edge-neutral-light);
+  box-shadow:
+    inset 0 1px 0 var(--edge-highlight-light),
+    inset 0 -1px 0 var(--edge-shadow-light),
+    0 0 0 1px rgba(255,255,255,.72),
+    0 5px 14px rgba(54,68,96,.09);
+}
+
+:root[data-theme='light'] .general-card {
+  border-color: rgba(118, 85, 232, .38);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.98),
+    inset 0 -1px 0 rgba(78,62,128,.1),
+    0 0 0 1px rgba(119,87,234,.055),
+    0 0 17px rgba(119,87,234,.075),
+    0 12px 28px rgba(47,59,84,.09);
+}
+
+:root[data-theme='light'] .room-card {
+  border-color: rgba(78,93,128,.2);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.98),
+    inset 0 -1px 0 rgba(60,75,108,.1),
+    0 8px 22px rgba(47,59,84,.08);
+}
+
+:root[data-theme='light'] .room-card--violet { border-color: rgba(118,85,232,.31); box-shadow: inset 0 1px 0 #fff, inset 0 -1px 0 rgba(80,63,139,.08), 0 0 15px rgba(118,85,232,.055), 0 8px 22px rgba(47,59,84,.08); }
+:root[data-theme='light'] .room-card--cyan { border-color: rgba(35,151,202,.3); box-shadow: inset 0 1px 0 #fff, inset 0 -1px 0 rgba(38,98,127,.07), 0 0 15px rgba(35,151,202,.05), 0 8px 22px rgba(47,59,84,.08); }
+:root[data-theme='light'] .room-card--emerald { border-color: rgba(39,153,119,.28); box-shadow: inset 0 1px 0 #fff, inset 0 -1px 0 rgba(42,105,84,.07), 0 0 15px rgba(39,153,119,.045), 0 8px 22px rgba(47,59,84,.08); }
+:root[data-theme='light'] .room-card--rose { border-color: rgba(201,77,131,.27); box-shadow: inset 0 1px 0 #fff, inset 0 -1px 0 rgba(133,61,92,.07), 0 0 15px rgba(201,77,131,.045), 0 8px 22px rgba(47,59,84,.08); }
+
+:root[data-theme='light'] .clip-card,
+:root[data-theme='light'] .side-panel,
+:root[data-theme='light'] .appearance-panel,
+:root[data-theme='light'] .image-mock,
+:root[data-theme='light'] .route-card,
+:root[data-theme='light'] .device-row {
+  border-color: rgba(78,93,128,.19);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.98),
+    inset 0 -1px 0 rgba(60,75,108,.09),
+    0 8px 22px rgba(47,59,84,.075);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  :root[data-theme='dark'] .general-card:hover { box-shadow: inset 0 1px 0 rgba(255,255,255,.11), inset 0 -1px 0 rgba(0,0,0,.5), 0 0 0 1px rgba(126,95,255,.1), 0 0 28px rgba(126,88,255,.2), 0 20px 44px rgba(0,0,0,.38); }
+  :root[data-theme='dark'] .room-card:hover { filter: brightness(1.035); }
+  :root[data-theme='dark'] .icon-button:hover,
+  :root[data-theme='dark'] .ghost-button:hover,
+  :root[data-theme='dark'] .favorite-button:hover,
+  :root[data-theme='dark'] .action-pill:hover,
+  :root[data-theme='dark'] .back-button:hover { border-color: rgba(154,171,255,.42); box-shadow: inset 0 1px 0 rgba(255,255,255,.12), inset 0 -1px 0 rgba(0,0,0,.5), 0 0 0 1px rgba(91,116,255,.12), 0 0 18px rgba(82,126,255,.12), 0 9px 22px rgba(0,0,0,.22); }
+}

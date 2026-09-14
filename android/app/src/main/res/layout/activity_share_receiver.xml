@@ -1,0 +1,226 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/share_dialog_background"
+    android:clipToPadding="false"
+    android:fillViewport="false"
+    android:overScrollMode="never">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="18dp"
+        android:paddingTop="16dp"
+        android:paddingEnd="18dp"
+        android:paddingBottom="16dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:contentDescription="@string/app_name"
+                android:src="@drawable/ic_oaclix_mark" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/share_title"
+                    android:textColor="@color/oaclix_text"
+                    android:textSize="19sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/share_subtitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:lineSpacingExtra="1dp"
+                    android:text="@string/share_subtitle"
+                    android:textColor="@color/oaclix_muted"
+                    android:textSize="12sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/share_destination_title"
+            android:textColor="@color/oaclix_text"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <RadioGroup
+            android:id="@+id/share_destination_group"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="7dp"
+            android:orientation="vertical" />
+
+        <TextView
+            android:id="@+id/share_destination_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="0dp"
+            android:lineSpacingExtra="1dp"
+            android:text="@string/share_destination_local_only"
+            android:textColor="@color/oaclix_muted"
+            android:textSize="11sp" />
+
+        <Button
+            android:id="@+id/share_configure_backend_button"
+            android:layout_width="wrap_content"
+            android:layout_height="42dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/share_secondary_button"
+            android:backgroundTint="@null"
+            android:minWidth="0dp"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:text="@string/share_configure_connection"
+            android:textAllCaps="false"
+            android:textColor="@color/oaclix_text"
+            android:textSize="12sp"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/share_text_header"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/share_text_title"
+                android:textColor="@color/oaclix_text"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/share_character_count"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/share_character_count_placeholder"
+                android:textColor="@color/oaclix_muted"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <EditText
+            android:id="@+id/shared_text_input"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="7dp"
+            android:background="@drawable/share_editor_background"
+            android:gravity="top|start"
+            android:hint="@string/share_input_hint"
+            android:inputType="textCapSentences|textMultiLine"
+            android:lineSpacingExtra="2dp"
+            android:maxLines="7"
+            android:minHeight="116dp"
+            android:minLines="4"
+            android:padding="14dp"
+            android:textColor="@color/oaclix_text"
+            android:textColorHint="@color/oaclix_muted"
+            android:textSize="15sp" />
+
+        <LinearLayout
+            android:id="@+id/share_image_section"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <app.oaclix.android.imageclipboard.SharedImagePreviewView
+                android:id="@+id/share_image_preview"
+                android:layout_width="86dp"
+                android:layout_height="86dp"
+                android:background="@drawable/share_editor_background"
+                android:clipToOutline="true"
+                android:contentDescription="@string/share_image_title"
+                android:padding="2dp"
+                android:scaleType="centerCrop" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/share_image_title"
+                    android:textColor="@color/oaclix_text"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/share_image_meta"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:lineSpacingExtra="1dp"
+                    android:text="@string/share_image_meta"
+                    android:textColor="@color/oaclix_muted"
+                    android:textSize="11sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/share_cancel_button"
+                android:layout_width="0dp"
+                android:layout_height="46dp"
+                android:layout_weight="1"
+                android:background="@drawable/share_secondary_button"
+                android:backgroundTint="@null"
+                android:text="@string/cancel"
+                android:textAllCaps="false"
+                android:textColor="@color/oaclix_text"
+                android:textSize="13sp" />
+
+            <Space
+                android:layout_width="9dp"
+                android:layout_height="1dp" />
+
+            <Button
+                android:id="@+id/share_save_button"
+                android:layout_width="0dp"
+                android:layout_height="46dp"
+                android:layout_weight="1.35"
+                android:background="@drawable/share_primary_button"
+                android:backgroundTint="@null"
+                android:text="@string/share_save_local"
+                android:textAllCaps="false"
+                android:textColor="@android:color/white"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>

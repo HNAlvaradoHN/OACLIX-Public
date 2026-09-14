@@ -1,0 +1,18 @@
+.build-version-badge {
+  position: fixed;
+  left: calc(10px + env(safe-area-inset-left));
+  bottom: calc(10px + env(safe-area-inset-bottom));
+  z-index: 90;
+  pointer-events: none;
+  padding: 4px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-strong);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .05em;
+  line-height: 1;
+  box-shadow: 0 4px 16px rgba(0,0,0,.18);
+  opacity: .82;
+}

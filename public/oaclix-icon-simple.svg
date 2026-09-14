@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="OACLIX">
+  <rect width="512" height="512" fill="#050607"/>
+  <g transform="translate(66.56 66.56) scale(.74)">
+    <defs>
+      <linearGradient id="ring" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0" stop-color="#C13CFF"/>
+        <stop offset="0.5" stop-color="#5B6DFF"/>
+        <stop offset="1" stop-color="#20D7E8"/>
+      </linearGradient>
+      <linearGradient id="clip" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0" stop-color="#B53BFF"/>
+        <stop offset="0.5" stop-color="#5A72FF"/>
+        <stop offset="1" stop-color="#25D7E8"/>
+      </linearGradient>
+    </defs>
+    <circle cx="256" cy="256" r="178" fill="none" stroke="url(#ring)" stroke-width="36"/>
+    <svg x="130" y="126" width="252" height="260" viewBox="0 0 24 24" overflow="visible">
+      <path d="M13.234 20.252 21.925 11.56a6.5 6.5 0 0 0-9.192-9.193l-9.104 9.104a4.5 4.5 0 0 0 6.364 6.364l8.692-8.691a2.5 2.5 0 0 0-3.536-3.536L6.457 14.3" transform="translate(-0.78 0.69)" fill="none" stroke="url(#clip)" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </g>
+</svg>

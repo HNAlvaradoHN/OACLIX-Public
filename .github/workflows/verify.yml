@@ -1,0 +1,104 @@
+name: Verify OACLIX
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web_worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '22'
+
+      - name: Audit snapshot
+        run: node scripts/audit-public-snapshot.mjs .
+
+      - name: Require reproducible dependency lockfile
+        run: test -f package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Test
+        run: npm test
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      OACLIX_ANDROID_VERSION_CODE: ${{ github.run_number }}
+      ANDROID_SDK_ROOT: ${{ runner.temp }}/oaclix-android-sdk
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Require Gradle dependency verification
+        working-directory: android
+        run: test -f gradle/verification-metadata.xml
+
+      - name: Verify Gradle wrapper JAR
+        working-directory: android
+        shell: bash
+        run: echo "b3a875ddc1f044746e1b1a55f645584505f4a10438c1afea9f15e92a7c42ec13  gradle/wrapper/gradle-wrapper.jar" | sha256sum -c -
+
+      - name: Set up Java 17
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install verified Android command-line tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          tools_zip="commandlinetools-linux-15859902_latest.zip"
+          tools_sha256="4e4c464f145a7512b57d088ac6c278c03c9eea610886b35a5e0804e74eedf583"
+          tools_url="https://dl.google.com/android/repository/${tools_zip}"
+          tmp_dir="$(mktemp -d)"
+          trap 'rm -rf "$tmp_dir"' EXIT
+          curl --fail --location --retry 3 --output "$tmp_dir/$tools_zip" "$tools_url"
+          echo "$tools_sha256  $tmp_dir/$tools_zip" | sha256sum -c -
+          unzip -q "$tmp_dir/$tools_zip" -d "$tmp_dir/extracted"
+          mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools/latest"
+          cp -a "$tmp_dir/extracted/cmdline-tools/." "$ANDROID_SDK_ROOT/cmdline-tools/latest/"
+          echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$ANDROID_SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+
+      - name: Install Android 16 SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Test and assemble Android
+        working-directory: android
+        run: ./gradlew testDebugUnitTest assembleDebug --no-daemon

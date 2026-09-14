@@ -1,0 +1,43 @@
+.clip-card.is-preserved {
+  border-color: color-mix(in srgb, var(--violet) 46%, var(--border));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--violet) 8%, #0b0e13), color-mix(in srgb, var(--cyan) 5%, #0b0e13));
+  box-shadow: 0 16px 38px rgba(0,0,0,.32), inset 0 1px color-mix(in srgb, white 5%, transparent);
+}
+
+.clip-card__preserved {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 7px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--violet) 35%, var(--border));
+  background: color-mix(in srgb, var(--violet) 10%, var(--surface));
+  color: color-mix(in srgb, var(--text) 88%, var(--violet));
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.clip-card__preserved svg { width: 11px; }
+
+.action-pill--preserve.is-active {
+  color: color-mix(in srgb, var(--text) 88%, var(--violet));
+  border-color: color-mix(in srgb, var(--violet) 38%, var(--border));
+  background: color-mix(in srgb, var(--violet) 11%, var(--surface-interactive));
+}
+
+.action-pill--preserve.is-active svg { fill: color-mix(in srgb, var(--violet) 22%, transparent); }
+
+.action-pill--preserve:disabled {
+  opacity: .58;
+  cursor: wait;
+}
+
+@media (max-width: 620px) {
+  .clip-card__preserved {
+    order: 4;
+    margin-left: 32px;
+  }
+
+  .clip-card__type { margin-left: auto; }
+}

@@ -1,0 +1,57 @@
+.icon-button,
+.sync-chip,
+.ghost-button,
+.favorite-button,
+.action-pill,
+.back-button {
+  text-align: center;
+}
+
+.sync-chip,
+.ghost-button,
+.favorite-button,
+.action-pill,
+.back-button {
+  justify-content: center;
+  line-height: 1;
+}
+
+.icon-button {
+  line-height: 0;
+}
+
+.icon-button svg,
+.sync-chip svg,
+.ghost-button svg,
+.favorite-button svg,
+.action-pill svg,
+.back-button svg {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.favorite-button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.room-toolbar__actions {
+  justify-content: flex-end;
+}
+
+@media (max-width: 620px) {
+  .room-toolbar__actions .favorite-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    line-height: 0;
+  }
+
+  .room-toolbar__actions .favorite-button svg {
+    width: 15px;
+    height: 15px;
+    margin: 0;
+    transform: none;
+  }
+}

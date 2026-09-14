@@ -1,0 +1,17 @@
+{
+  "name": "OACLIX",
+  "short_name": "OACLIX",
+  "description": "Portapapeles compartido y sincronizado",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#050607",
+  "theme_color": "#050607",
+  "icons": [
+    {
+      "src": "/oaclix-icon-simple.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
