@@ -1,0 +1,28 @@
+name: Resolve Gradle checksums
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  checksums:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Print trusted Maven Central SHA-256 files
+        shell: bash
+        run: |
+          set -euo pipefail
+          urls=(
+            "https://repo.maven.apache.org/maven2/com/google/guava/guava-parent/33.3.1-jre/guava-parent-33.3.1-jre.pom.sha256"
+            "https://repo.maven.apache.org/maven2/org/junit/junit-bom/5.10.2/junit-bom-5.10.2.module.sha256"
+            "https://repo.maven.apache.org/maven2/org/junit/junit-bom/5.11.0-M2/junit-bom-5.11.0-M2.module.sha256"
+          )
+          for url in "${urls[@]}"; do
+            echo "URL=$url"
+            curl --fail --silent --show-error --location "$url"
+            echo
+          done
