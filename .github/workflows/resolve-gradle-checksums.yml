@@ -12,17 +12,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Print trusted Maven Central SHA-256 files
+      - name: Hash missing Maven Central artifacts
         shell: bash
         run: |
           set -euo pipefail
           urls=(
-            "https://repo.maven.apache.org/maven2/com/google/guava/guava-parent/33.3.1-jre/guava-parent-33.3.1-jre.pom.sha256"
-            "https://repo.maven.apache.org/maven2/org/junit/junit-bom/5.10.2/junit-bom-5.10.2.module.sha256"
-            "https://repo.maven.apache.org/maven2/org/junit/junit-bom/5.11.0-M2/junit-bom-5.11.0-M2.module.sha256"
+            "https://repo.maven.apache.org/maven2/com/google/guava/guava-parent/33.3.1-jre/guava-parent-33.3.1-jre.pom"
+            "https://repo.maven.apache.org/maven2/org/junit/junit-bom/5.10.2/junit-bom-5.10.2.module"
+            "https://repo.maven.apache.org/maven2/org/junit/junit-bom/5.11.0-M2/junit-bom-5.11.0-M2.module"
           )
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
           for url in "${urls[@]}"; do
-            echo "URL=$url"
-            curl --fail --silent --show-error --location "$url"
-            echo
+            file="$tmp/$(basename "$url")"
+            curl --fail --silent --show-error --location --output "$file" "$url"
+            sha256sum "$file"
           done
