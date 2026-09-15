@@ -47,7 +47,7 @@ test('la base Android usa un SDK estable actual y mantiene red nativa acotada', 
 })
 
 test('Android usa la PWA empaquetada como superficie principal y no duplica su interfaz', async () => {
-  const [activity, bridge, appBuild, packageJson, viteConfig, workflow, identity] = await Promise.all([
+  const [activity, bridge, appBuild, packageJson, viteConfig, workflow, identity, imageStore] = await Promise.all([
     readAndroid('app/src/main/java/app/oaclix/android/MainActivity.kt'),
     readAndroid('app/src/main/java/app/oaclix/android/OaclixWebBridge.kt'),
     readAndroid('app/build.gradle.kts'),
@@ -55,10 +55,11 @@ test('Android usa la PWA empaquetada como superficie principal y no duplica su i
     readProject('vite.config.ts'),
     readProject('.github/workflows/verify.yml'),
     readProject('src/identity/deviceIdentity.ts'),
+    readProject('src/data/localImageClipboard.ts'),
   ])
 
   assert.match(activity, /WebView\(this\)/)
-  assert.match(activity, /addJavascriptInterface\(OaclixWebBridge\(\), NATIVE_BRIDGE_NAME\)/)
+  assert.match(activity, /addJavascriptInterface\(OaclixWebBridge\(applicationContext\), NATIVE_BRIDGE_NAME\)/)
   assert.match(activity, /MIXED_CONTENT_NEVER_ALLOW/)
   assert.match(activity, /allowFileAccess = false/)
   assert.match(activity, /allowContentAccess = false/)
@@ -66,10 +67,16 @@ test('Android usa la PWA empaquetada como superficie principal y no duplica su i
   assert.match(activity, /SHELL_PREFIX = "\/app\/"/)
   assert.match(activity, /assets\.open\(relativePath\)/)
   assert.match(activity, /url\.host != backendHost/)
+  assert.match(activity, /NATIVE_IMAGE_PREFIX = "\/app-native\/image\/"/)
+  assert.match(activity, /imageStore\.openInputStream\(item\)/)
+  assert.match(activity, /"Cache-Control" to "no-store"/)
   assert.match(bridge, /AndroidKeystoreDeviceIdentity/)
+  assert.match(bridge, /ImageClipboardStore/)
   assert.match(bridge, /@JavascriptInterface[\s\S]*?getDeviceId/)
   assert.match(bridge, /@JavascriptInterface[\s\S]*?createBootstrapProof/)
   assert.match(bridge, /@JavascriptInterface[\s\S]*?signAction/)
+  assert.match(bridge, /@JavascriptInterface[\s\S]*?listLocalImages/)
+  assert.match(bridge, /@JavascriptInterface[\s\S]*?deleteLocalImage/)
   assert.match(appBuild, /assets\.srcDir\(webBundleDir\)/)
   assert.match(appBuild, /verifyWebBundle/)
   assert.match(packageJson, /"build:android-web": "tsc -b && vite build --mode android"/)
@@ -80,6 +87,9 @@ test('Android usa la PWA empaquetada como superficie principal y no duplica su i
   assert.match(identity, /window\.OaclixNative/)
   assert.match(identity, /bridge\.signAction\(action, JSON\.stringify\(payload\)\)/)
   assert.match(identity, /bridge\.createBootstrapProof\(\)/)
+  assert.match(imageStore, /bridge\.listLocalImages\(\)/)
+  assert.match(imageStore, /fetch\(`\/app-native\/image\/\$\{encodeURIComponent\(item\.id\)\}`/)
+  assert.match(imageStore, /bridge\.deleteLocalImage\(item\.id\)/)
 })
 
 test('el Gradle Wrapper Android queda fijado y verificable', async () => {
