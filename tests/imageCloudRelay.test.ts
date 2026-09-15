@@ -101,13 +101,14 @@ test('relay code stores before acknowledging and never advertises this route as 
   assert.doesNotMatch(shareReceiver, /Imagen enviada por Directo/)
 })
 
-test('PWA shell owns foreground Direct while native receiver remains scoped to native Android surfaces', async () => {
-  const [controller, application, gate, manifest, mainActivity, foregroundWebReceiver] = await Promise.all([
+test('PWA shell owns foreground Direct and the Android sharesheet never boots native WebRTC', async () => {
+  const [controller, application, gate, manifest, mainActivity, shareReceiver, foregroundWebReceiver] = await Promise.all([
     read('android/app/src/main/java/app/oaclix/android/share/NativeImageRelayForegroundController.kt'),
     read('android/app/src/main/java/app/oaclix/android/OaclixApplication.kt'),
     read('android/app/src/main/java/app/oaclix/android/share/NativeForegroundReceiverGate.kt'),
     read('android/app/src/main/AndroidManifest.xml'),
     read('android/app/src/main/java/app/oaclix/android/MainActivity.kt'),
+    read('android/app/src/main/java/app/oaclix/android/ShareReceiverActivity.kt'),
     read('src/components/ForegroundLinkedImageReceiver.tsx'),
   ])
 
@@ -120,10 +121,11 @@ test('PWA shell owns foreground Direct while native receiver remains scoped to n
   assert.match(application, /onFirstSurfaceStarted = imageRelayController::start/)
   assert.match(application, /onLastSurfaceStopped = imageRelayController::stop/)
   assert.match(application, /usesNativeDirectReceiver\(activity\)/)
-  assert.match(application, /activity !is MainActivity/)
+  assert.match(application, /activity !is MainActivity && activity !is ShareReceiverActivity/)
   assert.match(gate, /startedSurfaces/)
   assert.match(gate, /if \(startedSurfaces != 0 \|\| !active\) return/)
   assert.doesNotMatch(mainActivity, /NativeImageReceiptBus|imageRelayController\.start\(\)|imageRelayController\.stop\(\)/)
+  assert.doesNotMatch(shareReceiver, /NativeImageDeviceRelayReceiver|NativeDirectImagePeerManager|PeerConnectionFactory/)
   assert.match(foregroundWebReceiver, /ensureClipboardRoomForegroundReception/)
   assert.match(foregroundWebReceiver, /suspendClipboardRoomForegroundReception/)
   assert.match(foregroundWebReceiver, /document\.visibilityState !== 'visible'/)
