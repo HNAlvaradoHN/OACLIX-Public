@@ -31,12 +31,14 @@ class OaclixApplication : Application(), Application.ActivityLifecycleCallbacks 
     }
 
     override fun onActivityStarted(activity: Activity) {
-        receiverGate.surfaceStarted()
+        if (usesNativeDirectReceiver(activity)) receiverGate.surfaceStarted()
     }
 
     override fun onActivityStopped(activity: Activity) {
-        receiverGate.surfaceStopped()
+        if (usesNativeDirectReceiver(activity)) receiverGate.surfaceStopped()
     }
+
+    private fun usesNativeDirectReceiver(activity: Activity): Boolean = activity !is MainActivity
 
     override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
     override fun onActivityResumed(activity: Activity) = Unit
