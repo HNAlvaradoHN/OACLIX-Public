@@ -10,6 +10,12 @@ import {
 } from './lanDirectFirstPrep'
 import { publishCloudSyncHint } from './cloudSyncHintBus'
 import {
+  localDirectCapabilities,
+  resolveRemoteDirectCapabilities,
+  validDirectCapabilities,
+  type DirectCapability,
+} from './directCapabilities'
+import {
   clearRealtimePresence,
   publishDirectLanPeerIds,
   publishLanPeerDiagnostic,
@@ -48,6 +54,7 @@ type PeerState = {
   offered: boolean
   probeToken: string | null
   validated: boolean
+  capabilities: Set<DirectCapability>
   sessionId: string
   negotiationId: string
   negotiationGeneration: number
@@ -69,8 +76,8 @@ type IncomingDirectImage = {
 }
 
 type DirectMessage =
-  | { type: 'probe'; token: string }
-  | { type: 'probe-ack'; token: string }
+  | { type: 'probe'; token: string; capabilities?: DirectCapability[] }
+  | { type: 'probe-ack'; token: string; capabilities?: DirectCapability[] }
   | { type: 'clipboard-change'; change: LanClipboardChange }
   | { type: 'direct-first-ack'; ack: LanDirectFirstPrepAck }
   | { type: 'local-clipboard-transfer'; transfer: LocalClipboardTransfer }
@@ -99,7 +106,14 @@ function randomToken() {
 
 function isDirectMessage(value: unknown): value is DirectMessage {
   if (!value || typeof value !== 'object') return false
-  const message = value as { type?: unknown; token?: unknown; change?: unknown; ack?: unknown; transfer?: unknown }
+  const message = value as {
+    type?: unknown
+    token?: unknown
+    change?: unknown
+    ack?: unknown
+    transfer?: unknown
+    capabilities?: unknown
+  }
   if (message.type === 'clipboard-change') return validLanClipboardChange(message.change)
   if (message.type === 'direct-first-ack') return validLanDirectFirstPrepAck(message.ack)
   if (message.type === 'local-clipboard-transfer') return validLocalClipboardTransfer(message.transfer)
@@ -109,6 +123,7 @@ function isDirectMessage(value: unknown): value is DirectMessage {
   return (message.type === 'probe' || message.type === 'probe-ack')
     && typeof message.token === 'string'
     && /^[a-f0-9]{24}$/.test(message.token)
+    && validDirectCapabilities(message.capabilities)
 }
 
 export class LanPeerManager {
@@ -189,14 +204,32 @@ export class LanPeerManager {
 
   getValidatedPeerIds() {
     return Array.from(this.peers.entries())
-      .filter(([, peer]) => peer.validated && peer.channel?.readyState === 'open')
+      .filter(([, peer]) => (
+        peer.validated
+        && peer.channel?.readyState === 'open'
+        && peer.capabilities.has('room-core')
+      ))
+      .map(([deviceId]) => deviceId)
+  }
+
+  getImageDirectPeerIds() {
+    return Array.from(this.peers.entries())
+      .filter(([, peer]) => (
+        peer.validated
+        && peer.channel?.readyState === 'open'
+        && peer.capabilities.has('image-direct')
+      ))
       .map(([deviceId]) => deviceId)
   }
 
   hasCloudFallbackPeers() {
     for (const remoteDeviceId of this.remoteSessions.keys()) {
       const peer = this.peers.get(remoteDeviceId)
-      if (!peer?.validated || peer.channel?.readyState !== 'open') return true
+      if (
+        !peer?.validated
+        || peer.channel?.readyState !== 'open'
+        || !peer.capabilities.has('room-core')
+      ) return true
     }
     return false
   }
@@ -220,7 +253,11 @@ export class LanPeerManager {
     let delivered = 0
 
     for (const peer of this.peers.values()) {
-      if (!peer.validated || peer.channel?.readyState !== 'open') continue
+      if (
+        !peer.validated
+        || peer.channel?.readyState !== 'open'
+        || !peer.capabilities.has('room-core')
+      ) continue
       peer.channel.send(serialized)
       delivered += 1
     }
@@ -231,7 +268,11 @@ export class LanPeerManager {
   sendClipboardChangeToPeer(remoteDeviceId: string, change: LanClipboardChange) {
     if (!validLanClipboardChange(change)) return false
     const peer = this.peers.get(remoteDeviceId)
-    if (!peer?.validated || peer.channel?.readyState !== 'open') return false
+    if (
+      !peer?.validated
+      || peer.channel?.readyState !== 'open'
+      || !peer.capabilities.has('room-core')
+    ) return false
     peer.channel.send(JSON.stringify({ type: 'clipboard-change', change } satisfies DirectMessage))
     return true
   }
@@ -244,7 +285,11 @@ export class LanPeerManager {
       || transfer.receiverDeviceId !== remoteDeviceId
     ) return false
     const peer = this.peers.get(remoteDeviceId)
-    if (!peer?.validated || peer.channel?.readyState !== 'open') return false
+    if (
+      !peer?.validated
+      || peer.channel?.readyState !== 'open'
+      || !peer.capabilities.has('room-core')
+    ) return false
     peer.channel.send(JSON.stringify({ type: 'local-clipboard-transfer', transfer } satisfies DirectMessage))
     return true
   }
@@ -257,7 +302,11 @@ export class LanPeerManager {
       || ack.receiverDeviceId !== this.ownDeviceId
     ) return false
     const peer = this.peers.get(remoteDeviceId)
-    if (!peer?.validated || peer.channel?.readyState !== 'open') return false
+    if (
+      !peer?.validated
+      || peer.channel?.readyState !== 'open'
+      || !peer.capabilities.has('room-core')
+    ) return false
     peer.channel.send(JSON.stringify({ type: 'local-clipboard-transfer-ack', ack } satisfies DirectMessage))
     return true
   }
@@ -275,7 +324,12 @@ export class LanPeerManager {
 
     const peer = this.peers.get(remoteDeviceId)
     const channel = peer?.channel
-    if (!peer?.validated || !channel || channel.readyState !== 'open') return false
+    if (
+      !peer?.validated
+      || !channel
+      || channel.readyState !== 'open'
+      || !peer.capabilities.has('image-direct')
+    ) return false
 
     this.sendingDirectImagePeers.add(remoteDeviceId)
     try {
@@ -315,7 +369,11 @@ export class LanPeerManager {
       || ack.receiverDeviceId !== this.ownDeviceId
     ) return false
     const peer = this.peers.get(remoteDeviceId)
-    if (!peer?.validated || peer.channel?.readyState !== 'open') return false
+    if (
+      !peer?.validated
+      || peer.channel?.readyState !== 'open'
+      || !peer.capabilities.has('image-direct')
+    ) return false
     peer.channel.send(JSON.stringify({ type: 'local-image-direct-ack', ack } satisfies DirectMessage))
     return true
   }
@@ -323,7 +381,11 @@ export class LanPeerManager {
   sendDirectFirstPrepAck(remoteDeviceId: string, ack: LanDirectFirstPrepAck) {
     if (!validLanDirectFirstPrepAck(ack) || ack.authorDeviceId !== remoteDeviceId) return false
     const peer = this.peers.get(remoteDeviceId)
-    if (!peer?.validated || peer.channel?.readyState !== 'open') return false
+    if (
+      !peer?.validated
+      || peer.channel?.readyState !== 'open'
+      || !peer.capabilities.has('room-core')
+    ) return false
     peer.channel.send(JSON.stringify({ type: 'direct-first-ack', ack } satisfies DirectMessage))
     return true
   }
@@ -364,7 +426,11 @@ export class LanPeerManager {
   }
 
   private receiveImageChunk(remoteDeviceId: string, peer: PeerState, data: ArrayBuffer) {
-    if (!peer.validated || this.peers.get(remoteDeviceId) !== peer) return
+    if (
+      !peer.validated
+      || !peer.capabilities.has('image-direct')
+      || this.peers.get(remoteDeviceId) !== peer
+    ) return
     const incoming = this.incomingDirectImages.get(remoteDeviceId)
     if (!incoming) return
 
@@ -688,6 +754,7 @@ export class LanPeerManager {
       offered: false,
       probeToken: null,
       validated: false,
+      capabilities: new Set(),
       sessionId,
       negotiationId: negotiationId ?? randomToken(),
       negotiationGeneration: resolvedGeneration,
@@ -873,6 +940,7 @@ export class LanPeerManager {
     peer.channel = channel
     channel.binaryType = 'arraybuffer'
     peer.validated = false
+    peer.capabilities = new Set()
     this.refreshPublishedStatus()
     this.publishDiagnostic(remoteDeviceId, 'channel-attached')
 
@@ -884,7 +952,11 @@ export class LanPeerManager {
       const token = randomToken()
       peer.probeToken = token
       this.publishDiagnostic(remoteDeviceId, 'channel-open')
-      channel.send(JSON.stringify({ type: 'probe', token } satisfies DirectMessage))
+      channel.send(JSON.stringify({
+        type: 'probe',
+        token,
+        capabilities: localDirectCapabilities(),
+      } satisfies DirectMessage))
     }
 
     channel.onmessage = (event) => {
@@ -904,8 +976,13 @@ export class LanPeerManager {
       if (!isDirectMessage(message)) return
 
       if (message.type === 'probe') {
+        peer.capabilities = resolveRemoteDirectCapabilities(message.capabilities)
         if (channel.readyState === 'open') {
-          channel.send(JSON.stringify({ type: 'probe-ack', token: message.token } satisfies DirectMessage))
+          channel.send(JSON.stringify({
+            type: 'probe-ack',
+            token: message.token,
+            capabilities: localDirectCapabilities(),
+          } satisfies DirectMessage))
           this.publishDiagnostic(remoteDeviceId, 'probe-received')
         }
         return
@@ -913,6 +990,7 @@ export class LanPeerManager {
 
       if (message.type === 'probe-ack') {
         if (message.token === peer.probeToken) {
+          peer.capabilities = resolveRemoteDirectCapabilities(message.capabilities)
           peer.validated = true
           this.clearDirectRetry(remoteDeviceId)
           this.refreshPublishedStatus()
@@ -924,6 +1002,7 @@ export class LanPeerManager {
       if (!peer.validated) return
 
       if (message.type === 'local-clipboard-transfer') {
+        if (!peer.capabilities.has('room-core')) return
         if (
           message.transfer.senderDeviceId !== remoteDeviceId
           || message.transfer.receiverDeviceId !== this.ownDeviceId
@@ -933,6 +1012,7 @@ export class LanPeerManager {
       }
 
       if (message.type === 'local-clipboard-transfer-ack') {
+        if (!peer.capabilities.has('room-core')) return
         if (
           message.ack.senderDeviceId !== this.ownDeviceId
           || message.ack.receiverDeviceId !== remoteDeviceId
@@ -942,6 +1022,7 @@ export class LanPeerManager {
       }
 
       if (message.type === 'local-image-direct-start') {
+        if (!peer.capabilities.has('image-direct')) return
         if (
           message.transfer.senderDeviceId !== remoteDeviceId
           || message.transfer.receiverDeviceId !== this.ownDeviceId
@@ -965,6 +1046,7 @@ export class LanPeerManager {
       }
 
       if (message.type === 'local-image-direct-ack') {
+        if (!peer.capabilities.has('image-direct')) return
         if (
           message.ack.senderDeviceId !== this.ownDeviceId
           || message.ack.receiverDeviceId !== remoteDeviceId
@@ -974,11 +1056,13 @@ export class LanPeerManager {
       }
 
       if (message.type === 'direct-first-ack') {
+        if (!peer.capabilities.has('room-core')) return
         if (message.ack.authorDeviceId !== this.ownDeviceId) return
         publishLanDirectFirstPrepAck(this.roomId, remoteDeviceId, message.ack)
         return
       }
 
+      if (!peer.capabilities.has('room-core')) return
       if (message.change.type === 'upsert' && message.change.item.authorDeviceId !== remoteDeviceId) return
       publishLanClipboardChange(this.roomId, message.change, remoteDeviceId)
     }
