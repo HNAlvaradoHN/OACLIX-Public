@@ -72,11 +72,16 @@ Las comparaciones con Blip, Quick Share, PairDrop o LocalSend deben hacerse con 
 
 No modificar más el crash Android por hipótesis. PR #2 permanece sin merge hasta repetir el gate físico con el APK vigente. Si el cierre persiste, el siguiente dato obligatorio es stack/tombstone/logcat del crash antes de otro cambio de lifecycle/WebRTC.
 
-## Siguiente bloque después del gate físico
+## Estado de ramas aisladas
 
-1. confirmar estabilidad de PR #2;
-2. medir PWA → Android con archivos pequeños, medianos y grandes;
-3. registrar throughput y presión del DataChannel;
-4. ajustar high/low-water o ventanas solo con evidencia de medición;
-5. implementar Android → PWA reutilizando el mismo protocolo y las mismas reglas de persistencia/backpressure;
-6. evaluar NAT traversal/relay $0 como etapa separada, sin mezclarlo con el gate de estabilidad.
+- PR #2 `feat/android-direct-image-native`: gate físico pendiente; no fusionar.
+- PR #3 `docs/direct-transfer-research`: solo investigación/documentación.
+- PR #4 `feat/android-pwa-visual-parity`: paridad visual Android aislada de WebRTC. Ya alinea tokens de color y añade una superficie/card para agrupar vinculación, editor y acciones sin cambiar IDs ni lógica de `MainActivity`.
+
+## Siguiente paso exacto
+
+1. completar CI de PR #4 y corregir únicamente fallos atribuibles a recursos/layout visuales;
+2. mantener PR #2 congelado hasta el gate físico;
+3. si PR #2 falla físicamente, capturar stack/tombstone/logcat antes de modificar lifecycle/WebRTC;
+4. si PR #2 pasa, instrumentar throughput, primer byte, ACK `stored` y pico de `bufferedAmount` antes de cambiar chunk/window sizes;
+5. evaluar NAT traversal y relay $0 como etapa separada; no activar ninguna opción que pueda facturar al exceder cuota.
