@@ -13,6 +13,8 @@ val ciApplicationIdSuffix = providers.environmentVariable("OACLIX_ANDROID_APPLIC
     ?.takeIf { it.matches(Regex("\\.[A-Za-z0-9._-]+")) }
     .orEmpty()
 
+val webBundleDir = rootProject.file("../dist-android")
+
 android {
     namespace = "app.oaclix.android"
     compileSdk = 36
@@ -37,6 +39,10 @@ android {
         resValues = true
     }
 
+    sourceSets {
+        getByName("main").assets.srcDir(webBundleDir)
+    }
+
     buildTypes {
         getByName("debug") {
             applicationIdSuffix = ".dev"
@@ -59,6 +65,18 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+}
+
+tasks.register("verifyWebBundle") {
+    doLast {
+        check(webBundleDir.resolve("index.html").isFile) {
+            "Falta dist-android/index.html. Ejecuta npm run build:android-web antes de compilar Android."
+        }
+    }
+}
+
+tasks.named("preBuild").configure {
+    dependsOn("verifyWebBundle")
 }
 
 dependencies {
