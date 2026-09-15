@@ -111,6 +111,14 @@ jobs:
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
+      - name: Probe WebRTC verification metadata
+        working-directory: android
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew --write-verification-metadata sha256 :app:dependencies --configuration debugRuntimeClasspath --no-daemon >/dev/null
+          sed -n '/group="io.github.webrtc-sdk"/,/<\/component>/p' gradle/verification-metadata.xml
+
       - name: Isolate PR debug installation
         if: github.event_name == 'pull_request'
         shell: bash
