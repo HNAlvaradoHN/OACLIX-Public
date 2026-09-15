@@ -7,6 +7,12 @@ val ciVersionCode = providers.environmentVariable("OACLIX_ANDROID_VERSION_CODE")
     ?.toIntOrNull()
     ?.takeIf { it > 0 }
 
+val ciApplicationIdSuffix = providers.environmentVariable("OACLIX_ANDROID_APPLICATION_ID_SUFFIX")
+    .orNull
+    ?.trim()
+    ?.takeIf { it.matches(Regex("\\.[A-Za-z0-9._-]+")) }
+    .orEmpty()
+
 android {
     namespace = "app.oaclix.android"
     compileSdk = 36
@@ -33,7 +39,7 @@ android {
 
     buildTypes {
         getByName("debug") {
-            applicationIdSuffix = ".dev"
+            applicationIdSuffix = ".dev$ciApplicationIdSuffix"
             versionNameSuffix = "-dev"
         }
 
