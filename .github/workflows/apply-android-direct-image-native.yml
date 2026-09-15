@@ -34,12 +34,9 @@ jobs:
         run: |
           set -euo pipefail
           git diff --check
-          changed="$(git status --short)"
-          test -n "$changed"
-          if grep -E '^.. \.github/' <<<"$changed"; then
-            echo "Temporary GitHub files were not fully removed" >&2
-            exit 1
-          fi
+          test ! -e .github/oaclix-temp
+          test ! -e .github/workflows/apply-android-direct-image-native.yml
+          test -n "$(git status --short)"
 
       - name: Commit final Android Direct receiver
         shell: bash
