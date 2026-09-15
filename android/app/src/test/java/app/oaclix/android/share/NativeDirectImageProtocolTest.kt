@@ -42,6 +42,15 @@ class NativeDirectImageProtocolTest {
     }
 
     @Test
+    fun `rejects image sizes whose direct chunk count cannot fit the wire integer`() {
+        val tooLarge = Int.MAX_VALUE.toLong() * NativeDirectImageProtocol.CHUNK_BYTES + 1L
+        val json = validStart(1L)
+            .put("chunkCount", Int.MAX_VALUE)
+        json.getJSONObject("item").put("byteSize", tooLarge)
+        assertNull(NativeDirectImageProtocol.parseStart(json))
+    }
+
+    @Test
     fun `ack is tied to exact transfer sender receiver and item`() {
         val start = NativeDirectImageProtocol.parseStart(validStart())!!
         val ackJson = NativeDirectImageProtocol.ackJson(start, "stored")

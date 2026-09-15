@@ -2,6 +2,7 @@ package app.oaclix.android.imageclipboard
 
 import android.content.Context
 import android.net.Uri
+import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -27,6 +28,12 @@ data class ImageClipboardItem(
 
 class ImageClipboardStore(private val context: Context) {
     private val directory = File(context.filesDir, DIRECTORY_NAME)
+    private val incomingDirectory = File(context.filesDir, INCOMING_DIRECTORY_NAME)
+
+    internal data class IncomingImageTarget(
+        val tempFile: File,
+        val targetFile: File,
+    )
 
     fun list(now: Long = System.currentTimeMillis()): List<ImageClipboardItem> {
         cleanup(now)
@@ -52,25 +59,10 @@ class ImageClipboardStore(private val context: Context) {
             .map { it.lowercase() }
             .firstOrNull { it.startsWith("image/") && extensionForMime(it) != null }
             ?: error("El contenido no contiene una imagen compatible")
-        val extension = extensionForMime(mimeType)
-            ?: error("Formato de imagen todavía no compatible: $mimeType")
 
-        return writeNewImage(now, extension) { temp ->
-            context.contentResolver.openInputStream(uri)?.use { input ->
-                FileOutputStream(temp).use { output ->
-                    val buffer = ByteArray(BUFFER_SIZE)
-                    var total = 0L
-                    while (true) {
-                        val read = input.read(buffer)
-                        if (read < 0) break
-                        total += read
-                        output.write(buffer, 0, read)
-                    }
-                    require(total > 0L) { "La imagen está vacía" }
-                    output.flush()
-                }
-            } ?: error("No se pudo abrir la imagen")
-        }
+        return context.contentResolver.openInputStream(uri)?.use { input ->
+            createFromStream(input, mimeType, now)
+        } ?: error("No se pudo abrir la imagen")
     }
 
     fun createFromBytes(
@@ -79,13 +71,90 @@ class ImageClipboardStore(private val context: Context) {
         now: Long = System.currentTimeMillis(),
     ): ImageClipboardItem {
         require(bytes.isNotEmpty()) { "La imagen está vacía" }
-        val extension = extensionForMime(mimeType)
+        return ByteArrayInputStream(bytes).use { input -> createFromStream(input, mimeType, now) }
+    }
+
+    fun createFromStream(
+        input: InputStream,
+        mimeType: String,
+        now: Long = System.currentTimeMillis(),
+    ): ImageClipboardItem {
+        val normalizedMimeType = mimeType.lowercase()
+        val extension = extensionForMime(normalizedMimeType)
             ?: error("Formato de imagen todavía no compatible: $mimeType")
         return writeNewImage(now, extension) { temp ->
             FileOutputStream(temp).use { output ->
-                output.write(bytes)
+                val buffer = ByteArray(BUFFER_SIZE)
+                var total = 0L
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    if (read == 0) continue
+                    total += read
+                    output.write(buffer, 0, read)
+                }
+                require(total > 0L) { "La imagen está vacía" }
                 output.flush()
             }
+        }
+    }
+
+
+    internal fun availableIncomingBytes(now: Long = System.currentTimeMillis()): Long {
+        directory.mkdirs()
+        incomingDirectory.mkdirs()
+        cleanup(now)
+        cleanupIncoming(now)
+        return incomingDirectory.usableSpace
+    }
+
+    internal fun createIncomingTarget(
+        mimeType: String,
+        createdAt: Long = System.currentTimeMillis(),
+    ): IncomingImageTarget {
+        val extension = extensionForMime(mimeType.lowercase())
+            ?: error("Formato de imagen todavía no compatible: $mimeType")
+        directory.mkdirs()
+        incomingDirectory.mkdirs()
+        val now = System.currentTimeMillis()
+        cleanup(now)
+        cleanupIncoming(now)
+
+        val id = UUID.randomUUID().toString()
+        val fileName = "${createdAt}_${id}.$extension"
+        val target = File(directory, fileName)
+        val temp = File(incomingDirectory, "$fileName$INCOMING_SUFFIX")
+        require(target.canonicalFile.parentFile == directory.canonicalFile) { "Destino de imagen inválido" }
+        require(temp.canonicalFile.parentFile == incomingDirectory.canonicalFile) { "Temporal de imagen inválido" }
+        temp.delete()
+        return IncomingImageTarget(temp, target)
+    }
+
+    internal fun commitIncomingTarget(
+        incoming: IncomingImageTarget,
+        expectedByteSize: Long,
+    ): ImageClipboardItem {
+        require(expectedByteSize > 0L) { "Tamaño de imagen inválido" }
+        require(incoming.tempFile.canonicalFile.parentFile == incomingDirectory.canonicalFile) {
+            "Temporal de imagen inválido"
+        }
+        require(incoming.targetFile.canonicalFile.parentFile == directory.canonicalFile) {
+            "Destino de imagen inválido"
+        }
+        require(incoming.tempFile.isFile && incoming.tempFile.length() == expectedByteSize) {
+            "La imagen recibida no coincide con el tamaño declarado"
+        }
+        require(!incoming.targetFile.exists()) { "El destino de imagen ya existe" }
+        require(incoming.tempFile.renameTo(incoming.targetFile)) { "No se pudo guardar la imagen recibida" }
+        return itemForFile(incoming.targetFile) ?: run {
+            incoming.targetFile.delete()
+            error("No se pudo registrar la imagen recibida")
+        }
+    }
+
+    internal fun discardIncomingTarget(incoming: IncomingImageTarget) {
+        if (incoming.tempFile.canonicalFile.parentFile == incomingDirectory.canonicalFile) {
+            incoming.tempFile.delete()
         }
     }
 
@@ -134,6 +203,17 @@ class ImageClipboardStore(private val context: Context) {
         }
     }
 
+
+    private fun cleanupIncoming(now: Long) {
+        if (!incomingDirectory.exists()) return
+        val staleBefore = now - RETENTION_MS
+        incomingDirectory.listFiles().orEmpty().forEach { file ->
+            if (!file.isFile || !file.name.endsWith(INCOMING_SUFFIX) || file.lastModified() <= staleBefore) {
+                file.delete()
+            }
+        }
+    }
+
     private fun itemForFile(file: File): ImageClipboardItem? {
         if (!file.isFile) return null
         val match = FILE_PATTERN.matchEntire(file.name) ?: return null
@@ -159,9 +239,11 @@ class ImageClipboardStore(private val context: Context) {
 
     companion object {
         const val DIRECTORY_NAME = "oaclix-images"
+        private const val INCOMING_DIRECTORY_NAME = "oaclix-images-incoming"
         const val RETENTION_MS = 6L * 60L * 60L * 1000L
         private const val BUFFER_SIZE = 64 * 1024
         private const val TEMP_SUFFIX = ".tmp"
+        private const val INCOMING_SUFFIX = ".part"
         private val FILE_PATTERN = Regex("(\\d+)_([0-9a-fA-F-]{36})\\.([a-z0-9]+)")
 
         fun providerAuthority(packageName: String): String = "$packageName.images"

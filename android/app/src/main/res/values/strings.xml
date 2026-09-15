@@ -22,7 +22,7 @@
     <string name="image_clip_label">Imagen OACLIX</string>
     <string name="image_copied">Imagen copiada · lista para Pegar</string>
     <string name="image_saved_local">Imagen guardada en Mi portapapeles</string>
-    <string name="image_received_cloud">Imagen recibida por Nube</string>
+    <string name="image_received_cloud">Imagen recibida en Mi portapapeles</string>
     <string name="expires_hours_minutes">Vence en %1$d h %2$d min</string>
     <string name="share_target_label">OACLIX</string>
     <string name="share_title">Compartir con OACLIX</string>

@@ -14,6 +14,7 @@ import okhttp3.WebSocketListener
 import org.json.JSONObject
 import java.net.URL
 import java.util.Base64
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
 internal class NativeImageDeviceRelayReceiver(
@@ -25,6 +26,7 @@ internal class NativeImageDeviceRelayReceiver(
 ) {
     private val normalizedBaseUrl = NativeIdentityApi.normalizeBaseUrl(baseUrl)
     private val socketRef = AtomicReference<WebSocket?>(null)
+    private val directManagerRef = AtomicReference<NativeDirectImagePeerManager?>(null)
     private val imageStore = ImageClipboardStore(context)
     private val receipts = context.getSharedPreferences(RECEIPT_PREFERENCES, Context.MODE_PRIVATE)
 
@@ -34,6 +36,16 @@ internal class NativeImageDeviceRelayReceiver(
         if (!bootstrap.authenticated || !bootstrap.persisted) return
         val roomId = bootstrap.generalRoomId ?: return
         val deviceId = bootstrap.deviceId
+
+        val directManager = runCatching {
+            NativeDirectImagePeerManager(
+                context = context,
+                currentDeviceId = deviceId,
+                sendRealtimeFrame = { frame -> socketRef.get()?.send(frame.toString()) == true },
+                onStored = onStored,
+            )
+        }.getOrNull()
+        directManagerRef.set(directManager)
 
         val proof = identity.signAction("realtime.connect", JSONObject().put("roomId", roomId).toString())
         val envelope = NativeIdentityLinkingApi.signedEnvelopeBody(proof)
@@ -46,29 +58,52 @@ internal class NativeImageDeviceRelayReceiver(
             .header("Sec-WebSocket-Protocol", "oaclix-v1, $authProtocol")
             .build()
 
+        val connectionClosed = AtomicBoolean(false)
         val socket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onMessage(webSocket: WebSocket, text: String) {
                 val message = runCatching { JSONObject(text) }.getOrNull() ?: return
-                if (message.optString("type") != "device-image-transfer") return
-                val fromDeviceId = message.optString("fromDeviceId")
-                if (!DEVICE_ID_PATTERN.matches(fromDeviceId) || fromDeviceId == deviceId) return
-                val transfer = message.optJSONObject("transfer") ?: return
-                handleTransfer(webSocket, transfer, fromDeviceId, deviceId)
+                when (message.optString("type")) {
+                    "presence" -> directManager?.handlePresence(message)
+                    "signal" -> directManager?.handleSignal(message)
+                    "device-image-transfer" -> {
+                        val fromDeviceId = message.optString("fromDeviceId")
+                        if (!DEVICE_ID_PATTERN.matches(fromDeviceId) || fromDeviceId == deviceId) return
+                        val transfer = message.optJSONObject("transfer") ?: return
+                        handleTransfer(webSocket, transfer, fromDeviceId, deviceId)
+                    }
+                }
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                connectionClosed.set(true)
                 socketRef.compareAndSet(webSocket, null)
+                closeDirectManager(directManager)
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                connectionClosed.set(true)
                 socketRef.compareAndSet(webSocket, null)
+                closeDirectManager(directManager)
             }
         })
-        if (!socketRef.compareAndSet(null, socket)) socket.close(1000, "Receptor duplicado")
+        if (!socketRef.compareAndSet(null, socket)) {
+            closeDirectManager(directManager)
+            socket.close(1000, "Receptor duplicado")
+            return
+        }
+        if (connectionClosed.get() && socketRef.compareAndSet(socket, null)) {
+            closeDirectManager(directManager)
+        }
     }
 
     fun stop() {
+        directManagerRef.getAndSet(null)?.close()
         socketRef.getAndSet(null)?.close(1000, "OACLIX en pausa")
+    }
+
+    private fun closeDirectManager(manager: NativeDirectImagePeerManager?) {
+        if (manager == null) return
+        if (directManagerRef.compareAndSet(manager, null)) manager.close()
     }
 
     private fun handleTransfer(
