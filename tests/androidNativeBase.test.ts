@@ -9,13 +9,14 @@ async function readAndroid(path: string) {
 }
 
 test('la base Android usa un SDK estable actual y limita red al bloque de identidad', async () => {
-  const [rootBuild, appBuild, manifest, identityApi, localActivity, shareReceiver] = await Promise.all([
+  const [rootBuild, appBuild, manifest, identityApi, localActivity, shareReceiver, directReceiver] = await Promise.all([
     readAndroid('build.gradle.kts'),
     readAndroid('app/build.gradle.kts'),
     readAndroid('app/src/main/AndroidManifest.xml'),
     readAndroid('app/src/main/java/app/oaclix/android/identity/NativeIdentityApi.kt'),
     readAndroid('app/src/main/java/app/oaclix/android/MainActivity.kt'),
     readAndroid('app/src/main/java/app/oaclix/android/ShareReceiverActivity.kt'),
+    readAndroid('app/src/main/java/app/oaclix/android/share/NativeImageDeviceRelayReceiver.kt'),
   ])
   assert.match(rootBuild, /com\.android\.application"\) version "9\.1\.1"/)
   assert.match(appBuild, /compileSdk = 36/)
@@ -30,11 +31,14 @@ test('la base Android usa un SDK estable actual y limita red al bloque de identi
   assert.match(manifest, /android\.permission\.INTERNET/)
   assert.match(manifest, /android\.permission\.ACCESS_NETWORK_STATE/)
   assert.match(manifest, /android\.permission\.CHANGE_NETWORK_STATE/)
+  assert.match(manifest, /android\.permission\.MODIFY_AUDIO_SETTINGS/)
   assert.match(manifest, /android:usesCleartextTraffic="false"/)
   assert.match(identityApi, /\/api\/identity\/bootstrap/)
   assert.match(identityApi, /startsWith\("https:\/\/"\)/)
   assert.doesNotMatch(localActivity, /NativeIdentityApi|HttpURLConnection|java\.net\./)
   assert.doesNotMatch(shareReceiver, /NativeIdentityApi|HttpURLConnection|java\.net\./)
+  assert.match(directReceiver, /Looper\.getMainLooper\(\)/)
+  assert.match(directReceiver, /Handler\(Looper\.getMainLooper\(\)\)\.post/)
 })
 
 test('el Gradle Wrapper Android queda fijado y verificable', async () => {
