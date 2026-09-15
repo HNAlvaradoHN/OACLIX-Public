@@ -22,7 +22,8 @@ test('General destination picker only enables destinations with Directo or Nube 
 
   assert.match(source, /status === 'direct' \|\| status === 'cloud'/)
   assert.match(source, /status === 'offline'/)
-  assert.match(source, /status === 'checking'/)
+  assert.match(source, /: 'checking'/)
+  assert.match(source, /Comprobando conexión/)
   assert.match(source, /Enviar aquí/)
 })
 

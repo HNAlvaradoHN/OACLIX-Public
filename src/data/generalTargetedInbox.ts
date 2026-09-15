@@ -2,7 +2,7 @@ import {
   clipboardTransferSurface,
   validLocalClipboardTransfer,
   type LocalClipboardTransfer,
-} from '../realtime/localClipboardTransfer'
+} from '../realtime/localClipboardTransfer.ts'
 
 const DATABASE_NAME = 'oaclix-general-targeted'
 const STORE_NAME = 'text-items'

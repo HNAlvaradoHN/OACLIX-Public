@@ -17,12 +17,14 @@ test('General vuelve a autorizar y decide una sola ruta justo al enviar', async 
 test('General instala el ACK antes del envío en Directo y Nube', async () => {
   const source = await readFile(sourcePath, 'utf8')
 
-  const directWaiter = source.indexOf('subscribeLanLocalClipboardTransferAcks')
-  const directSend = source.indexOf('sender.sendLocalClipboardTransfer')
-  const cloudWaiter = source.indexOf('subscribeDeviceRelayAcks')
-  const cloudSend = source.indexOf('sendDeviceRelayTransfer')
+  const directRoute = source.indexOf("if (route === 'direct')")
+  const directWaiter = source.indexOf('subscribeLanLocalClipboardTransferAcks', directRoute)
+  const directSend = source.indexOf('sender.sendLocalClipboardTransfer', directRoute)
+  const cloudRoute = source.indexOf("if (route === 'cloud')")
+  const cloudWaiter = source.indexOf('subscribeDeviceRelayAcks', cloudRoute)
+  const cloudSend = source.indexOf('sendDeviceRelayTransfer(roomId, remoteDeviceId, transfer)', cloudRoute)
 
-  assert.ok(directWaiter >= 0 && directWaiter < directSend)
-  assert.ok(cloudWaiter >= 0 && cloudWaiter < cloudSend)
+  assert.ok(directRoute >= 0 && directWaiter > directRoute && directWaiter < directSend)
+  assert.ok(cloudRoute >= 0 && cloudWaiter > cloudRoute && cloudWaiter < cloudSend)
   assert.match(source, /ack\.status === 'stored'/)
 })
