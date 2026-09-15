@@ -41,10 +41,12 @@ type NativeProof = {
   signature: string
 }
 
-type OaclixNativeBridge = {
+export type OaclixNativeBridge = {
   getDeviceId(): string
   createBootstrapProof(): string
   signAction(action: string, payloadJson: string): string
+  listLocalImages(): string
+  deleteLocalImage(id: string): boolean
 }
 
 declare global {
