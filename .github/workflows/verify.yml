@@ -148,20 +148,21 @@ jobs:
           set -euo pipefail
           file='android/gradle/verification-metadata.xml'
           sha="$(git rev-parse "HEAD:${file}")"
-          content="$(base64 -w0 "$file")"
-          payload="$(jq -n \
+          base64 -w0 "$file" > "$RUNNER_TEMP/oaclix-vmeta.b64"
+          jq -n \
             --arg message 'build(android): verify M144 WebRTC dependency' \
-            --arg content "$content" \
+            --rawfile content "$RUNNER_TEMP/oaclix-vmeta.b64" \
             --arg sha "$sha" \
             --arg branch '${{ github.head_ref }}' \
-            '{message:$message,content:$content,sha:$sha,branch:$branch}')"
+            '{message:$message,content:$content,sha:$sha,branch:$branch}' \
+            > "$RUNNER_TEMP/oaclix-vmeta-payload.json"
           curl --fail --silent --show-error \
             --request PUT \
             --header "Authorization: Bearer ${GH_TOKEN}" \
             --header 'Accept: application/vnd.github+json' \
             --header 'X-GitHub-Api-Version: 2022-11-28' \
             "https://api.github.com/repos/${GITHUB_REPOSITORY}/contents/${file}" \
-            --data "$payload" >/dev/null
+            --data-binary "@$RUNNER_TEMP/oaclix-vmeta-payload.json" >/dev/null
 
       - name: Isolate PR debug installation
         if: github.event_name == 'pull_request'
