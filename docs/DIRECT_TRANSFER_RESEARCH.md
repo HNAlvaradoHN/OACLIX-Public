@@ -4,84 +4,191 @@ Fecha: 2026-09-15
 
 ## Objetivo
 
-Documentar técnicas verificables que puedan mejorar Directo sin introducir almacenamiento cloud de archivos, servicios con costo ni código incompatible con OACLIX.
+Conservar solo las conclusiones que cambian decisiones de OACLIX. No documentar cada búsqueda ni convertir esta nota en un inventario de aplicaciones.
 
-## Hallazgos aplicables
+## Decisiones técnicas resultantes
 
-### PairDrop
+### 1. No reiniciar OACLIX completo
 
-Referencia estudiada: `schlagmichdoch/PairDrop`.
+La UI PWA, identidad por dispositivo, vinculación, roster/backend y almacenamiento local siguen siendo aprovechables. La parte que debe replantearse es la capa de comunicación de `Directo`.
 
-- Licencia: GPL-3.0. No copiar código a OACLIX sin revisar compatibilidad de licencia; usar únicamente ideas/protocolos generales observados.
-- Transporte: WebRTC `RTCDataChannel`, ordenado.
-- Framing de archivos: chunks de 64,000 bytes.
-- Control de flujo adicional: agrupa chunks en particiones de 1 MB y espera confirmación `partition-received` antes de continuar con la siguiente partición.
-- El servidor participa en señalización; los bytes del archivo viajan por el canal de datos cuando WebRTC conecta.
+### 2. Separar control y datos
 
-Implicación para OACLIX: nuestro chunk actual de 64 KiB está en el mismo orden de magnitud. No hay evidencia de que aumentar arbitrariamente el chunk produzca mayor throughput. La mejora importante es controlar presión de envío y medir el pipeline completo.
+Cloud/backend debe encargarse de:
 
-### LocalSend
+- identidad y dispositivos vinculados;
+- roster/presencia;
+- solicitudes y aceptación;
+- señalización/negociación;
+- wake/push cuando corresponda.
 
-Referencia estudiada: `localsend/localsend`.
+Los bytes de texto/imagen/archivo no deben pasar normalmente por la nube.
 
-- Licencia: Apache-2.0, más permisiva que GPL-3.0.
-- Es una referencia útil para transferencia local y descubrimiento, pero cualquier reutilización futura debe conservar avisos/licencia según corresponda.
+### 3. Directo no debe depender de un WebRTC permanente
 
-## Estado técnico de OACLIX PR #2
+WebRTC sigue siendo útil, especialmente para navegador/PWA, pero no debe ser el mecanismo permanente de presencia ni el centro de toda la arquitectura Android.
 
-La rama `feat/android-direct-image-native` ya implementa varias técnicas que deben conservarse:
+Patrón preferido:
+
+1. descubrir/coordinar;
+2. levantar el transporte pesado solo cuando haya transferencia;
+3. transferir;
+4. cerrar el transporte.
+
+Esto reduce consumo, complejidad de background y riesgo de crashes.
+
+### 4. Ruta automática por capacidades
+
+El usuario solo elige el dispositivo. OACLIX decide la mejor ruta disponible.
+
+Orden objetivo, sujeto a pruebas reales:
+
+1. LAN directa;
+2. Wi‑Fi Direct / mecanismo cercano nativo cuando aplique;
+3. WebRTC para navegador y casos compatibles;
+4. Internet directo / NAT traversal;
+5. relay E2E solo si existe una opción económicamente segura.
+
+Wi‑Fi Aware puede explorarse después, pero nunca ser requisito porque depende del hardware.
+
+### 5. El relay no debe convertirse en almacenamiento cloud
+
+Si se incorpora relay, debe actuar como conducto temporal de bytes cifrados extremo a extremo. El archivo definitivo se persiste solo en el receptor.
+
+No debe existir fallback silencioso de `Directo` a almacenamiento cloud.
+
+### 6. Transfer Engine separado del transporte
+
+Imágenes y archivos grandes deben usar un motor común con:
+
+- manifest/metadatos;
+- chunks o bloques;
+- hash/integridad;
+- journal durable;
+- retry;
+- resume;
+- ACK final solo después de persistir correctamente.
+
+La ruta de red no debe definir la lógica de persistencia. En el futuro una transferencia puede cambiar de ruta sin rehacer el motor de archivos.
+
+### 7. Texto pequeño y archivos grandes no necesitan el mismo transporte
+
+Clipboard de texto puede usar una ruta ligera. Imágenes/archivos grandes necesitan streaming, backpressure y resume. No obligar a un único transporte a resolver ambos problemas.
+
+## Referencias que aportaron patrones útiles
+
+No copiar implementaciones sin revisar licencia. Se usan como referencias arquitectónicas:
+
+- Blip: control central + directo primero + relay fallback;
+- Quick Share / Bada / NearDrop: proximidad, BLE, Wi‑Fi Direct y conexiones temporales;
+- LocalSend: LAN simple, descubrimiento y transferencia directa sin nube;
+- Magic Wormhole: rendezvous separado de transit y fallback de relay;
+- libp2p/DCUtR: coordinación vía relay para intentar luego conexión directa;
+- RustDesk: rendezvous + hole punching + relay;
+- Tailscale/Taildrop: selección automática entre directo y relay cifrado;
+- Syncthing: bloques, hashes y reanudación robusta;
+- KDE Connect: dispositivos vinculados, clipboard y archivos como capacidades separadas;
+- croc: relay, resume y emparejamiento seguro;
+- Flying Carpet: enlaces locales/ad-hoc sin infraestructura;
+- PairDrop: WebRTC DataChannel y backpressure para navegador.
+
+## Lo valioso que OACLIX ya tiene
+
+La base actual de Directo incluye ideas que deben conservarse aunque cambie la arquitectura:
 
 - chunks binarios de 64 KiB;
-- lectura PWA por ventanas de 16 chunks (1 MiB), evitando leer el archivo completo antes de enviar;
+- lectura por ventanas en PWA;
 - `RTCDataChannel.bufferedAmount` como backpressure;
-- high-water de 1 MiB y low-water de 256 KiB;
-- espera por `bufferedamountlow` con timeout defensivo;
-- Android escribe los chunks recibidos por streaming a almacenamiento privado;
-- ACK `stored` solamente después de persistir;
-- no existe fallback silencioso de bytes Directo a Nube.
+- high/low-water para controlar cola;
+- escritura Android por streaming;
+- almacenamiento privado;
+- ACK `stored` después de persistir;
+- ausencia de fallback silencioso de bytes Directo a Nube.
 
-Esto significa que OACLIX ya tiene una base de throughput más avanzada que un simple bucle `channel.send()` sin control de cola.
+## Cloudflare: función objetivo y regla de costo
 
-## Arquitectura objetivo sin cargos
+Cloudflare debe quedar como plano de control, no como carretera principal de datos.
 
-Orden de preferencia:
+Mantener mientras sigan dentro del plan gratuito y sean necesarios:
 
-1. conexión local/directa entre dispositivos;
-2. WebRTC P2P directo entre redes mediante técnicas de NAT traversal que sean realmente gratuitas y no puedan generar facturación;
-3. puente/relay únicamente si se encuentra una opción cuyo límite económico sea duro en $0 y que no almacene el archivo;
-4. si no existe relay con garantía $0, fallar de forma explícita en lugar de activar un servicio facturable.
+- Workers / Static Assets;
+- D1 para identidad, relaciones y metadatos pequeños;
+- Durable Objects / WebSocket para presencia y señalización.
 
-Un relay, si se incorpora, debe actuar solo como conducto de bytes. El archivo definitivo se persiste únicamente en el dispositivo receptor; OACLIX no debe convertir ese relay en almacenamiento cloud.
+No usar para Directo normal:
+
+- R2 como almacenamiento de transferencias;
+- relay facturable sin límite duro;
+- TURN/SFU o cualquier servicio que pueda generar cobro automático sin aprobación explícita.
+
+### Auditoría real de cuenta — 2026-09-15
+
+Verificado manualmente en el panel Cloudflare:
+
+- `Workers Free`: activo;
+- facturas visibles: ninguna;
+- uso facturable observado: `$0.00`;
+- costo proyectado observado: `$0.00`;
+- existía `R2 Paid`, con un bucket vacío `oanix-encrypted-objects`;
+- el bucket fue eliminado (`0 objetos`, `0 B` antes de eliminarlo);
+- `R2 Paid` fue cancelado y quedó en estado `Finalizando`, con fin indicado para 2026-10-06;
+- método de pago existía en la cuenta, por lo que cualquier servicio facturable futuro debe tratarse como riesgo real.
+
+Regla del proyecto:
+
+> OACLIX no activará servicios con posibilidad de generar cargos sin aprobación explícita del Ing. Si una función gratuita alcanza su límite, debe degradarse o detenerse antes de convertir consumo en facturación.
+
+## Qué no implementar ahora
+
+- DHT completa;
+- CRDT para el clipboard básico;
+- Wi‑Fi Aware como requisito;
+- Bluetooth para mover imágenes grandes;
+- WebRTC nativo permanentemente activo;
+- almacenamiento cloud obligatorio para Directo;
+- un protocolo P2P gigante propio antes de validar rutas simples.
+
+## Orden recomendado de construcción
+
+1. hacer confiable el plano de control: roster, presencia, solicitud pendiente y estado independiente del canal de datos;
+2. crear/aislar el Transfer Engine con chunks, hashes, resume y journal;
+3. añadir ruta LAN directa simple;
+4. mantener WebRTC como ruta para PWA/navegador;
+5. resolver wake/background Android con mecanismo ligero y transporte temporal;
+6. añadir Wi‑Fi Direct para proximidad/offline;
+7. estudiar Internet directo/NAT traversal;
+8. añadir relay E2E solo si puede mantenerse dentro de una política de costo segura;
+9. optimizar después con QUIC/Wi‑Fi Aware u otras rutas si las métricas lo justifican.
 
 ## Medición antes de optimizar
 
-No llamar “rápida” a una implementación solo por cambiar el tamaño de chunk. La siguiente etapa de rendimiento debe medir al menos:
+No cambiar tamaños de chunk ni transporte por intuición. Medir al menos:
 
-- bytes/segundo útiles y Mbps efectivos;
+- Mbps efectivos;
 - tiempo hasta primer byte;
 - tiempo total hasta ACK `stored`;
-- pico de `bufferedAmount`;
-- memoria del emisor y receptor;
+- memoria pico;
+- `bufferedAmount` o equivalente;
 - tamaño de archivo;
-- tipo de ruta: LAN/P2P Internet/relay;
-- modelo de dispositivo y tipo de enlace cuando sea posible.
+- ruta usada;
+- comportamiento al perder red, cambiar de red o reabrir la app.
 
-Las comparaciones con Blip, Quick Share, PairDrop o LocalSend deben hacerse con el mismo archivo y la misma pareja de dispositivos/red para evitar conclusiones falsas.
+Comparar siempre con el mismo archivo y la misma pareja de dispositivos/red.
 
-## Gate actual
-
-No modificar más el crash Android por hipótesis. PR #2 permanece sin merge hasta repetir el gate físico con el APK vigente. Si el cierre persiste, el siguiente dato obligatorio es stack/tombstone/logcat del crash antes de otro cambio de lifecycle/WebRTC.
-
-## Estado de ramas aisladas
+## Estado actual de desarrollo
 
 - PR #2 `feat/android-direct-image-native`: gate físico pendiente; no fusionar.
-- PR #3 `docs/direct-transfer-research`: solo investigación/documentación.
-- PR #4 `feat/android-pwa-visual-parity`: paridad visual Android aislada de WebRTC. Ya alinea tokens de color y añade una superficie/card para agrupar vinculación, editor y acciones sin cambiar IDs ni lógica de `MainActivity`.
+- PR #3 `docs/direct-transfer-research`: contiene esta investigación/decisiones.
+- PR #4 `feat/android-pwa-visual-parity`: visual, aislado de transporte/backend.
+- PR #5 `feat/android-pwa-shell`: desarrollo Android/PWA y Directo; no considerar estable hasta gate físico.
 
-## Siguiente paso exacto
+## Siguiente decisión de arquitectura
 
-1. completar CI de PR #4 y corregir únicamente fallos atribuibles a recursos/layout visuales;
-2. mantener PR #2 congelado hasta el gate físico;
-3. si PR #2 falla físicamente, capturar stack/tombstone/logcat antes de modificar lifecycle/WebRTC;
-4. si PR #2 pasa, instrumentar throughput, primer byte, ACK `stored` y pico de `bufferedAmount` antes de cambiar chunk/window sizes;
-5. evaluar NAT traversal y relay $0 como etapa separada; no activar ninguna opción que pueda facturar al exceder cuota.
+Antes de seguir perfeccionando el receptor WebRTC permanente de segundo plano, comparar esta arquitectura objetivo contra el código real actual y clasificar cada componente como:
+
+- conservar;
+- reutilizar con cambios;
+- reemplazar;
+- eliminar.
+
+No hacer un reinicio total de OACLIX salvo que esa comparación demuestre que es más barato y seguro que una migración incremental.
