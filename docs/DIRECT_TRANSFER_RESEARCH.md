@@ -182,13 +182,67 @@ Comparar siempre con el mismo archivo y la misma pareja de dispositivos/red.
 - PR #4 `feat/android-pwa-visual-parity`: visual, aislado de transporte/backend.
 - PR #5 `feat/android-pwa-shell`: desarrollo Android/PWA y Directo; no considerar estable hasta gate físico.
 
-## Siguiente decisión de arquitectura
+## Comparación contra el código real actual
 
-Antes de seguir perfeccionando el receptor WebRTC permanente de segundo plano, comparar esta arquitectura objetivo contra el código real actual y clasificar cada componente como:
+La comparación de `main` y los PR activos confirma que no conviene reiniciar OACLIX completo. La migración debe ser incremental y concentrarse en comunicación.
 
-- conservar;
-- reutilizar con cambios;
-- reemplazar;
-- eliminar.
+### Conservar
 
-No hacer un reinicio total de OACLIX salvo que esa comparación demuestre que es más barato y seguro que una migración incremental.
+- **PWA/UI React**: no depende de una arquitectura de transporte concreta y sigue siendo la superficie común correcta.
+- **Identidad criptográfica por dispositivo**: P-256, firma de acciones y `deviceId` derivado de la clave son una base útil; en Android PR #5 la clave privada pasa a Keystore mediante bridge.
+- **Vinculación y roster en D1**: usuarios/personas, dispositivos, nombres, salas y membresías pertenecen al plano de control y se conservan.
+- **Worker/API autenticada**: conservar autenticación, validación de acciones, administración de dispositivos y metadatos pequeños.
+- **Durable Object/WebSocket autenticado**: conservarlo para presencia, señalización y mensajes de control pequeños.
+- **Almacenamiento local**: IndexedDB/PWA y almacenamiento privado Android siguen siendo la ubicación correcta del contenido local.
+- **Sharesheet Android y bridge PWA/nativo** de PR #5: son capacidades de plataforma y no dependen de WebRTC permanente.
+- **Escritura Android por streaming + commit final + ACK `stored`**: conservar el principio de persistir antes de confirmar.
+
+### Reutilizar con cambios
+
+- **`LanPeerManager`**: hoy mezcla presencia, negociación, WebRTC, retry, transferencia de texto, transferencia de imagen y estado de producto. Debe dividirse en un coordinador de rutas y adaptadores de transporte. Su implementación WebRTC puede sobrevivir como `WebRtcTransport` para PWA, pero no como dueño de toda la comunicación.
+- **`RealtimeSignalClient`**: conservar conexión autenticada, presencia y señalización. Retirar de él la responsabilidad de transportar payloads de clipboard/imagen por `device-transfer` / `device-image-transfer`.
+- **`RealtimeHub`**: conservar autenticación, presencia y enrutamiento de `signal`; reducirlo a control. Eliminar el relay de contenido pesado y los límites creados específicamente para frames base64 de imágenes.
+- **`localImageDirectTransfer` y backpressure WebRTC**: reutilizar framing, tamaños, validaciones y control de cola como primer adaptador del futuro Transfer Engine; añadir hashes, journal y resume sin amarrarlos a WebRTC.
+- **Direct-first durable state existente**: aprovechar las ideas de secuencia, ACK, replay y persistencia, pero no seguir ampliando la actual red de `shadow`, `gap repair` y reconciliación cloud como núcleo universal. El Transfer Engine debe absorber solo las partes útiles de durabilidad de forma más simple.
+- **Cloud/D1 de texto**: conservarlo como función explícita de Nube/General cuando el producto la requiera; no usar escritura cloud automática como sustituto invisible de una transferencia `Directo` fallida.
+
+### Reemplazar
+
+- **`routePolicy.ts` actual** (`Directo local` / `Nube` / `Desconectado`): reemplazar por selección por capacidades/rutas, con estados como `LAN`, `Wi‑Fi Direct`, `WebRTC`, `Internet Direct`, `Relay` y `No disponible`; la UI puede seguir mostrando nombres simples.
+- **WebRTC como presencia permanente**: presencia viene del plano de control; WebRTC debe crearse por sesión de transferencia y cerrarse al terminar o quedar ocioso.
+- **Background Android de PR #5**: no convertir `BackgroundDirectAvailabilityService` + WebRTC nativo siempre disponible en arquitectura final. Mantener solo lo necesario para validar/salvar el shell; el diseño final debe usar wake/control ligero y levantar transporte temporal.
+- **Recepción PWA que acumula todos los chunks de una imagen en memoria antes de crear `Blob`**: para archivos grandes debe pasar a escritura/streaming durable dentro del Transfer Engine.
+
+### Eliminar cuando la migración tenga reemplazo funcional
+
+- relay de imágenes base64 por Durable Object/WebSocket (`device-image-transfer`);
+- límite y framing de ~10 MiB creado para ese relay cloud;
+- `device-transfer` de contenido como camino normal del WebSocket de control;
+- receptores cloud-relay que existan solo para esos payloads;
+- cualquier inicialización WebRTC nativa cuyo único objetivo sea mantener al receptor disponible permanentemente en segundo plano.
+
+No borrar estas piezas antes de que exista una ruta sustituta probada; la eliminación debe ocurrir en la misma etapa que introduce el reemplazo para no dejar dos arquitecturas acumuladas.
+
+## Decisión sobre los PR activos
+
+- **PR #3** sigue siendo la rama correcta para esta decisión/documentación.
+- **PR #4** puede permanecer aislado; no afecta la arquitectura.
+- **PR #2** y **PR #5** no deben fusionarse tal como están hasta resolver el cambio de dirección de Directo.
+- De **PR #5** conviene rescatar PWA shell, Keystore bridge, Sharesheet/importación local y endurecimiento WebView. La parte de receptor WebRTC nativo permanente en background queda como implementación transitoria, no como objetivo final.
+- No invertir más trabajo en optimizar el WebRTC permanente de background salvo lo mínimo necesario para obtener un diagnóstico reproducible o separar limpiamente las piezas reutilizables.
+
+## Plan de migración recomendado
+
+La siguiente implementación debe hacerse en bloques pequeños, manteniendo OACLIX usable:
+
+1. **Separar control de payload** sin cambiar todavía la UI: crear contrato de solicitud de transferencia y mantener Durable Object solo para control/señalización.
+2. **Extraer un Transfer Engine mínimo** para imagen: `manifest + chunks + hash + journal + ACK persisted`; inicialmente usar el WebRTC PWA existente como primer transporte.
+3. **Separar `WebRtcTransport` de `LanPeerManager`** y dejar al nuevo Route Manager elegirlo solo cuando corresponda.
+4. **Añadir LAN directa simple** como segundo transporte y medir contra WebRTC con los mismos archivos/dispositivos.
+5. **Migrar Android background** a wake/control ligero + servicio temporal de transferencia; eliminar receptor WebRTC permanente cuando el reemplazo pase prueba física.
+6. **Añadir Wi‑Fi Direct** para Android cercano/offline.
+7. Solo después estudiar Internet directo/NAT traversal y relay E2E con límite de costo seguro.
+
+## Siguiente paso exacto
+
+No reiniciar OACLIX ni seguir parchando el receptor permanente. El siguiente cambio de código debe ser el bloque 1: **introducir el contrato de control para solicitudes de transferencia y separar los payloads de `RealtimeSignalClient`/`RealtimeHub`, sin eliminar aún el camino antiguo hasta que el nuevo contrato tenga pruebas y pueda migrarse por etapas**.
