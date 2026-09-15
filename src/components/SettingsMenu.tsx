@@ -1,3 +1,4 @@
+import { AndroidBackgroundReceivingOption } from './AndroidBackgroundReceivingOption'
 import { Icon } from './Icon'
 
 type SettingsMenuProps = {
@@ -25,6 +26,8 @@ export function SettingsMenu({ open, onClose, onOpenConnections, onOpenAppearanc
         </header>
 
         <div className="settings-menu__options">
+          <AndroidBackgroundReceivingOption />
+
           <button className="settings-menu__option" type="button" onClick={onOpenConnections}>
             <span className="settings-menu__icon"><Icon name="wifi" /></span>
             <span>
