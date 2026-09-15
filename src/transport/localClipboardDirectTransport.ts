@@ -5,12 +5,14 @@ import {
 } from '../data/localClipboard'
 import type { LinkedDeviceSnapshot } from '../identity/deviceLinking'
 import {
+  clipboardTransferSurface,
   createLocalClipboardTransfer,
   createLocalClipboardTransferAck,
   getLocalClipboardDirectSender,
   subscribeLanLocalClipboardTransferAcks,
   subscribeLanLocalClipboardTransfers,
 } from '../realtime/localClipboardTransfer'
+import { receiveGeneralTargetedText } from './generalTargetedReceiver'
 import {
   publishLocalClipboardReceipt,
   subscribeLocalClipboardReceipts,
@@ -32,6 +34,23 @@ function ensureReceiver(roomId: string) {
   const unsubscribe = subscribeLanLocalClipboardTransfers(roomId, (transfer, remoteDeviceId) => {
     const sender = getLocalClipboardDirectSender(roomId)
     if (!sender) return
+
+    if (clipboardTransferSurface(transfer) === 'general') {
+      void receiveGeneralTargetedText(roomId, transfer, remoteDeviceId, 'direct')
+        .then((stored) => {
+          sender.sendLocalClipboardTransferAck(
+            remoteDeviceId,
+            createLocalClipboardTransferAck(transfer, stored ? 'stored' : 'expired'),
+          )
+        })
+        .catch(() => {
+          sender.sendLocalClipboardTransferAck(
+            remoteDeviceId,
+            createLocalClipboardTransferAck(transfer, 'rejected'),
+          )
+        })
+      return
+    }
 
     void storeReceivedLocalClipboardText(transfer.item, remoteDeviceId)
       .then((stored) => {
@@ -87,6 +106,14 @@ export async function sendLocalClipboardTextDirect(
     let settled = false
     let timer: number | null = null
 
+    const complete = (callback: () => void) => {
+      if (settled) return
+      settled = true
+      if (timer != null) window.clearTimeout(timer)
+      unsubscribe()
+      callback()
+    }
+
     const unsubscribe = subscribeLanLocalClipboardTransferAcks(roomId, (ack, ackRemoteDeviceId) => {
       if (
         ackRemoteDeviceId !== remoteDeviceId
@@ -102,14 +129,6 @@ export async function sendLocalClipboardTextDirect(
         complete(() => reject(new Error('El otro dispositivo rechazó el texto')))
       }
     })
-
-    const complete = (callback: () => void) => {
-      if (settled) return
-      settled = true
-      if (timer != null) window.clearTimeout(timer)
-      unsubscribe()
-      callback()
-    }
 
     timer = window.setTimeout(() => {
       complete(() => reject(new Error('No se recibió confirmación del otro dispositivo')))
@@ -127,4 +146,8 @@ export function subscribeLocalClipboardDirectReceipts(
 ) {
   ensureReceiver(roomId)
   return subscribeLocalClipboardReceipts(roomId, listener)
+}
+
+export function ensureLocalClipboardDirectReception(roomId: string) {
+  ensureReceiver(roomId)
 }
