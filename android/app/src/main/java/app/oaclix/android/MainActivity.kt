@@ -19,7 +19,7 @@ import app.oaclix.android.imageclipboard.ImageClipboardStore
 import app.oaclix.android.imageclipboard.ImageThumbnailDecoder
 import app.oaclix.android.localclipboard.LocalClipboardEntry
 import app.oaclix.android.localclipboard.LocalClipboardHistory
-import app.oaclix.android.share.NativeImageRelayForegroundController
+import app.oaclix.android.share.NativeImageReceiptBus
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import kotlin.math.ceil
@@ -31,7 +31,7 @@ class MainActivity : Activity() {
     private lateinit var emptyState: TextView
     private lateinit var itemsContainer: LinearLayout
     private lateinit var ioExecutor: ExecutorService
-    private lateinit var imageRelayController: NativeImageRelayForegroundController
+    private var imageReceiptSubscription: AutoCloseable? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -40,13 +40,6 @@ class MainActivity : Activity() {
         history = LocalClipboardHistory(this)
         imageStore = ImageClipboardStore(this)
         ioExecutor = Executors.newSingleThreadExecutor()
-        imageRelayController = NativeImageRelayForegroundController(this) {
-            runOnUiThread {
-                if (isDestroyed || isFinishing) return@runOnUiThread
-                toast(getString(R.string.image_received_cloud))
-                loadItems()
-            }
-        }
         input = findViewById(R.id.local_text_input)
         emptyState = findViewById(R.id.empty_state)
         itemsContainer = findViewById(R.id.items_container)
@@ -60,7 +53,14 @@ class MainActivity : Activity() {
 
     override fun onStart() {
         super.onStart()
-        if (::imageRelayController.isInitialized) imageRelayController.start()
+        imageReceiptSubscription?.close()
+        imageReceiptSubscription = NativeImageReceiptBus.subscribe {
+            runOnUiThread {
+                if (isDestroyed || isFinishing) return@runOnUiThread
+                toast(getString(R.string.image_received_cloud))
+                loadItems()
+            }
+        }
     }
 
     override fun onResume() {
@@ -69,12 +69,14 @@ class MainActivity : Activity() {
     }
 
     override fun onStop() {
-        if (::imageRelayController.isInitialized) imageRelayController.stop()
+        imageReceiptSubscription?.close()
+        imageReceiptSubscription = null
         super.onStop()
     }
 
     override fun onDestroy() {
-        if (::imageRelayController.isInitialized) imageRelayController.close()
+        imageReceiptSubscription?.close()
+        imageReceiptSubscription = null
         if (::ioExecutor.isInitialized) ioExecutor.shutdown()
         super.onDestroy()
     }
