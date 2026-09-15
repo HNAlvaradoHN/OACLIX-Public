@@ -24,7 +24,10 @@ jobs:
           node-version: '22'
 
       - name: Apply capability isolation
-        run: python3 scripts/apply-direct-capabilities.py
+        run: |
+          set -euo pipefail
+          python3 scripts/apply-direct-capabilities.py
+          python3 scripts/fix-direct-capability-isolation.py
 
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
@@ -43,6 +46,7 @@ jobs:
           set -euo pipefail
           rm .github/workflows/apply-direct-capabilities.yml
           rm scripts/apply-direct-capabilities.py
+          rm scripts/fix-direct-capability-isolation.py
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
