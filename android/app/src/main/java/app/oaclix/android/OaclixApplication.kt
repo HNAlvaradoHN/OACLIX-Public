@@ -38,7 +38,8 @@ class OaclixApplication : Application(), Application.ActivityLifecycleCallbacks 
         if (usesNativeDirectReceiver(activity)) receiverGate.surfaceStopped()
     }
 
-    private fun usesNativeDirectReceiver(activity: Activity): Boolean = activity !is MainActivity
+    private fun usesNativeDirectReceiver(activity: Activity): Boolean =
+        activity !is MainActivity && activity !is ShareReceiverActivity
 
     override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
     override fun onActivityResumed(activity: Activity) = Unit
