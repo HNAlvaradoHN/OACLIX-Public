@@ -31,119 +31,317 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
-          def replace_once(path: str, old: str, new: str):
-              file = Path(path)
-              text = file.read_text()
+          def replace_once(text: str, old: str, new: str, label: str):
               if old not in text:
-                  raise SystemExit(f"Expected block not found in {path}: {old[:100]!r}")
-              file.write_text(text.replace(old, new, 1))
+                  raise SystemExit(f"Expected anchor not found: {label}")
+              return text.replace(old, new, 1)
 
-          app = 'src/App.tsx'
-          replace_once(
-              app,
+          def sub_once(text: str, pattern: str, replacement: str, label: str):
+              updated, count = re.subn(pattern, lambda _: replacement, text, count=1, flags=re.S)
+              if count != 1:
+                  raise SystemExit(f"Expected regex block not found: {label}")
+              return updated
+
+          app_path = Path('src/App.tsx')
+          app = app_path.read_text()
+          app = replace_once(app,
               "import { GeneralCard } from './components/GeneralCard'\n",
               "import { GeneralCard } from './components/GeneralCard'\nimport { GeneralDestinationPanel } from './components/GeneralDestinationPanel'\n",
-          )
-          replace_once(
-              app,
+              'GeneralDestinationPanel import')
+          app = replace_once(app,
               "import { createClipboardText, deleteClipboardText, ensureClipboardRoomConnectivity, ensureClipboardRoomControlConnectivity, listClipboardChanges, subscribeCloudClipboardSyncHints, subscribeDirectClipboardChanges, suspendClipboardRoomConnectivity, type ClipboardChange, type ClipboardTextSnapshot } from './data/clipboardApi'\n",
               "import { deleteClipboardText, ensureClipboardRoomConnectivity, ensureClipboardRoomControlConnectivity, ensureClipboardRoomForegroundReception, listClipboardChanges, subscribeCloudClipboardSyncHints, subscribeDirectClipboardChanges, suspendClipboardRoomConnectivity, suspendClipboardRoomForegroundReception, type ClipboardChange, type ClipboardTextSnapshot } from './data/clipboardApi'\n",
-          )
-          replace_once(
-              app,
+              'clipboardApi import')
+          app = replace_once(app,
               "import { selectRecentGeneralTexts } from './data/generalClipboardView'\n",
               "import { selectRecentGeneralTexts } from './data/generalClipboardView'\nimport { deleteGeneralTargetedInboxItem, readGeneralTargetedInbox, type GeneralTargetedInboxItem } from './data/generalTargetedInbox'\n",
-          )
-          replace_once(
-              app,
+              'targeted inbox import')
+          app = replace_once(app,
               "import { classifyDirectSequence } from './transport/directCursorPolicy'\n",
               "import { classifyDirectSequence } from './transport/directCursorPolicy'\nimport { subscribeGeneralTargetedReceipts } from './transport/generalTargetedReceiptBus'\nimport { sendGeneralTargetedText } from './transport/generalTargetedTextTransport'\n",
-          )
-          replace_once(
-              app,
-              "  const [generalItems, setGeneralItems] = useState<ClipboardTextSnapshot[]>([])\n  const [localPreservedItems, setLocalPreservedItems] = useState<ClipboardTextSnapshot[]>([])\n",
-              "  const [generalItems, setGeneralItems] = useState<ClipboardTextSnapshot[]>([])\n  const [generalTargetedItems, setGeneralTargetedItems] = useState<GeneralTargetedInboxItem[]>([])\n  const [generalDestinationOpen, setGeneralDestinationOpen] = useState(false)\n  const [pendingGeneralText, setPendingGeneralText] = useState<string | null>(null)\n  const [generalComposerResetKey, setGeneralComposerResetKey] = useState(0)\n  const [localPreservedItems, setLocalPreservedItems] = useState<ClipboardTextSnapshot[]>([])\n",
-          )
-          replace_once(
-              app,
-              "  const sendGeneralText = useCallback(async (text: string) => {\n    const roomId = identity?.generalRoomId\n    if (!roomId || !identity.persisted || !generalCacheReady) throw new Error('General todavía no está disponible en este dispositivo')\n\n    const result = await createClipboardText(roomId, text)\n    const nextItems = mergeGeneralItems([result.item])\n    persistGeneralCache(roomId, nextItems)\n    if (result.delivery === 'direct') {\n      flash('Texto enviado por Directo local')\n      return\n    }\n\n    const synced = await syncGeneral()\n    flash(synced ? 'Texto enviado a General' : 'Texto guardado; actualización pendiente')\n  }, [flash, generalCacheReady, identity?.generalRoomId, identity?.persisted, mergeGeneralItems, persistGeneralCache, syncGeneral])\n",
-              "  const stageGeneralText = useCallback(async (text: string) => {\n    const roomId = identity?.generalRoomId\n    if (!roomId || !identity.persisted) throw new Error('General todavía no está disponible en este dispositivo')\n    setPendingGeneralText(text)\n    setGeneralDestinationOpen(true)\n    return false\n  }, [identity?.generalRoomId, identity?.persisted])\n\n  const sendGeneralTextToDestination = useCallback(async (deviceId: string) => {\n    const roomId = identity?.generalRoomId\n    const text = pendingGeneralText\n    if (!roomId || !identity.persisted || !text) throw new Error('El texto de General ya no está disponible')\n\n    const result = await sendGeneralTargetedText(roomId, deviceId, text)\n    setPendingGeneralText(null)\n    setGeneralDestinationOpen(false)\n    setGeneralComposerResetKey((current) => current + 1)\n    flash(result.delivery === 'direct' ? 'Texto enviado por Directo al dispositivo elegido' : 'Texto enviado por Nube al dispositivo elegido')\n  }, [flash, identity?.generalRoomId, identity?.persisted, pendingGeneralText])\n",
-          )
-          replace_once(
-              app,
+              'targeted transport imports')
+          app = replace_once(app,
+              "  const [generalItems, setGeneralItems] = useState<ClipboardTextSnapshot[]>([])\n",
+              "  const [generalItems, setGeneralItems] = useState<ClipboardTextSnapshot[]>([])\n  const [generalTargetedItems, setGeneralTargetedItems] = useState<GeneralTargetedInboxItem[]>([])\n  const [generalDestinationOpen, setGeneralDestinationOpen] = useState(false)\n  const [pendingGeneralText, setPendingGeneralText] = useState<string | null>(null)\n  const [generalComposerResetKey, setGeneralComposerResetKey] = useState(0)\n",
+              'General targeted state')
+
+          app = sub_once(app,
+              r"  const sendGeneralText = useCallback\(async \(text: string\) => \{.*?\n  const deleteGeneralText = useCallback",
+              """  const stageGeneralText = useCallback(async (text: string) => {
+    const roomId = identity?.generalRoomId
+    if (!roomId || !identity.persisted) throw new Error('General todavía no está disponible en este dispositivo')
+    setPendingGeneralText(text)
+    setGeneralDestinationOpen(true)
+    return false
+  }, [identity?.generalRoomId, identity?.persisted])
+
+  const sendGeneralTextToDestination = useCallback(async (deviceId: string) => {
+    const roomId = identity?.generalRoomId
+    const text = pendingGeneralText
+    if (!roomId || !identity.persisted || !text) throw new Error('El texto de General ya no está disponible')
+
+    const result = await sendGeneralTargetedText(roomId, deviceId, text)
+    setPendingGeneralText(null)
+    setGeneralDestinationOpen(false)
+    setGeneralComposerResetKey((current) => current + 1)
+    flash(result.delivery === 'direct'
+      ? 'Texto enviado por Directo al dispositivo elegido'
+      : 'Texto enviado por Nube al dispositivo elegido')
+  }, [flash, identity?.generalRoomId, identity?.persisted, pendingGeneralText])
+
+  const deleteGeneralText = useCallback""",
+              'legacy General send callback')
+
+          app = replace_once(app,
               "  const preserveGeneralItem = useCallback(async (item: ClipboardItem, target: PreserveTarget) => {\n",
-              "  const deleteGeneralVisibleText = useCallback(async (itemId: string) => {\n    const roomId = identity?.generalRoomId\n    if (!roomId || !identity.persisted) throw new Error('General todavía no está disponible en este dispositivo')\n    if (generalTargetedItems.some((entry) => entry.id === itemId)) {\n      await deleteGeneralTargetedInboxItem(roomId, itemId)\n      setGeneralTargetedItems((current) => current.filter((entry) => entry.id !== itemId))\n      flash('Eliminado de General en este dispositivo')\n      return\n    }\n    await deleteGeneralText(itemId)\n  }, [deleteGeneralText, flash, generalTargetedItems, identity?.generalRoomId, identity?.persisted])\n\n  const preserveGeneralItem = useCallback(async (item: ClipboardItem, target: PreserveTarget) => {\n",
-          )
-          replace_once(
-              app,
-              "    const snapshot = generalItemsRef.current.find((entry) => entry.id === item.id)\n      ?? localPreservedItems.find((entry) => entry.id === item.id)\n    if (!snapshot) throw new Error('Este contenido ya no está disponible para conservar')\n",
-              "    const targeted = generalTargetedItems.find((entry) => entry.id === item.id)\n    const targetedSnapshot: ClipboardTextSnapshot | undefined = targeted && identity?.personId ? {\n      sequence: 0,\n      id: targeted.id,\n      authorPersonId: identity.personId,\n      authorDeviceId: targeted.senderDeviceId,\n      text: targeted.text,\n      createdAt: targeted.createdAt,\n      expiresAt: targeted.expiresAt,\n    } : undefined\n    const snapshot = generalItemsRef.current.find((entry) => entry.id === item.id)\n      ?? localPreservedItems.find((entry) => entry.id === item.id)\n      ?? targetedSnapshot\n    if (!snapshot) throw new Error('Este contenido ya no está disponible para conservar')\n",
-          )
-          replace_once(
-              app,
+              """  const deleteGeneralVisibleText = useCallback(async (itemId: string) => {
+    const roomId = identity?.generalRoomId
+    if (!roomId || !identity.persisted) throw new Error('General todavía no está disponible en este dispositivo')
+    if (generalTargetedItems.some((entry) => entry.id === itemId)) {
+      await deleteGeneralTargetedInboxItem(roomId, itemId)
+      setGeneralTargetedItems((current) => current.filter((entry) => entry.id !== itemId))
+      flash('Eliminado de General en este dispositivo')
+      return
+    }
+    await deleteGeneralText(itemId)
+  }, [deleteGeneralText, flash, generalTargetedItems, identity?.generalRoomId, identity?.persisted])
+
+  const preserveGeneralItem = useCallback(async (item: ClipboardItem, target: PreserveTarget) => {
+""",
+              'local targeted delete callback')
+          app = replace_once(app,
+              """    const snapshot = generalItemsRef.current.find((entry) => entry.id === item.id)
+      ?? localPreservedItems.find((entry) => entry.id === item.id)
+    if (!snapshot) throw new Error('Este contenido ya no está disponible para conservar')
+""",
+              """    const targeted = generalTargetedItems.find((entry) => entry.id === item.id)
+    const targetedSnapshot: ClipboardTextSnapshot | undefined = targeted && identity?.personId ? {
+      sequence: 0,
+      id: targeted.id,
+      authorPersonId: identity.personId,
+      authorDeviceId: targeted.senderDeviceId,
+      text: targeted.text,
+      createdAt: targeted.createdAt,
+      expiresAt: targeted.expiresAt,
+    } : undefined
+    const snapshot = generalItemsRef.current.find((entry) => entry.id === item.id)
+      ?? localPreservedItems.find((entry) => entry.id === item.id)
+      ?? targetedSnapshot
+    if (!snapshot) throw new Error('Este contenido ya no está disponible para conservar')
+""",
+              'preserve targeted snapshot')
+          app = replace_once(app,
               "  }, [flash, identity?.generalRoomId, identity?.persisted, localPreservedItems])\n\n  const releaseGeneralItem",
               "  }, [flash, generalTargetedItems, identity?.generalRoomId, identity?.persisted, identity?.personId, localPreservedItems])\n\n  const releaseGeneralItem",
-          )
-          replace_once(
-              app,
-              "  useEffect(() => {\n    const roomId = identity?.generalRoomId\n    if (!roomId || !identity.persisted) return\n\n    return subscribeLocalImageDirectReceipts(roomId, () => {\n      flash('Imagen recibida por Directo local')\n    })\n  }, [flash, identity?.generalRoomId, identity?.persisted])\n\n  useEffect(() => {\n    if (cloudConnectivity === 'online' || cloudConnectivity === 'offline') {\n",
-              "  useEffect(() => {\n    const roomId = identity?.generalRoomId\n    if (!roomId || !identity.persisted) return\n\n    return subscribeLocalImageDirectReceipts(roomId, () => {\n      flash('Imagen recibida por Directo local')\n    })\n  }, [flash, identity?.generalRoomId, identity?.persisted])\n\n  useEffect(() => {\n    let cancelled = false\n    const roomId = identity?.generalRoomId\n    setGeneralTargetedItems([])\n    if (!roomId || !identity.persisted) return () => { cancelled = true }\n\n    const mergeTargeted = (items: GeneralTargetedInboxItem[]) => {\n      setGeneralTargetedItems((current) => {\n        const merged = new Map(current.map((item) => [item.id, item]))\n        for (const item of items) merged.set(item.id, item)\n        return Array.from(merged.values())\n          .filter((item) => item.expiresAt > Date.now())\n          .sort((a, b) => b.createdAt - a.createdAt || b.id.localeCompare(a.id))\n      })\n    }\n\n    void readGeneralTargetedInbox(roomId)\n      .then((items) => { if (!cancelled) mergeTargeted(items) })\n      .catch(() => undefined)\n    const unsubscribe = subscribeGeneralTargetedReceipts(roomId, ({ item, delivery }) => {\n      if (cancelled) return\n      mergeTargeted([item])\n      flash(delivery === 'direct' ? 'Texto recibido en General por Directo' : 'Texto recibido en General por Nube')\n    })\n    return () => {\n      cancelled = true\n      unsubscribe()\n    }\n  }, [flash, identity?.generalRoomId, identity?.persisted])\n\n  useEffect(() => {\n    if (cloudConnectivity === 'online' || cloudConnectivity === 'offline') {\n",
-          )
-          replace_once(
-              app,
-              "  useEffect(() => {\n    const roomId = identity?.generalRoomId\n    if (!connectedSurfaceMode || !roomId || !identity.persisted) return\n\n    if (connectedSurfaceMode === 'content') ensureClipboardRoomConnectivity(roomId)\n    else ensureClipboardRoomControlConnectivity(roomId)\n    return () => suspendClipboardRoomConnectivity(roomId)\n  }, [connectedSurfaceMode, identity?.generalRoomId, identity?.persisted])\n\n  useEffect(() => {\n    const roomId = identity?.generalRoomId\n    if (!isGeneralView || !roomId || !identity.persisted) return\n",
-              "  useEffect(() => {\n    const roomId = identity?.generalRoomId\n    if (!connectedSurfaceMode || !roomId || !identity.persisted) return\n\n    if (connectedSurfaceMode === 'content') ensureClipboardRoomConnectivity(roomId)\n    else ensureClipboardRoomControlConnectivity(roomId)\n    return () => suspendClipboardRoomConnectivity(roomId)\n  }, [connectedSurfaceMode, identity?.generalRoomId, identity?.persisted])\n\n  useEffect(() => {\n    const roomId = identity?.generalRoomId\n    if (!roomId || !identity.persisted) return\n    ensureClipboardRoomForegroundReception(roomId)\n    return () => suspendClipboardRoomForegroundReception(roomId)\n  }, [identity?.generalRoomId, identity?.persisted])\n\n  useEffect(() => {\n    const roomId = identity?.generalRoomId\n    if (!isGeneralView || !roomId || !identity.persisted) return\n",
-          )
-          replace_once(
-              app,
-              "  const recentGeneralCardItems = useMemo<ClipboardItem[]>(() => selectRecentGeneralTexts(\n    generalItems,\n    localPreservedIds,\n    Date.now(),\n  ).map((item) => ({\n    id: item.id,\n    type: 'text',\n    author: item.authorDeviceId === identity?.deviceId ? 'Este dispositivo' : 'Dispositivo vinculado',\n    text: item.text,\n    ownedByMe: true,\n  })), [generalItems, identity?.deviceId, localPreservedIds])\n",
-              "  const recentGeneralCardItems = useMemo<ClipboardItem[]>(() => {\n    const now = Date.now()\n    const entries = selectRecentGeneralTexts(generalItems, localPreservedIds, now).map((item) => ({\n      createdAt: item.createdAt,\n      card: {\n        id: item.id,\n        type: 'text' as const,\n        author: item.authorDeviceId === identity?.deviceId ? 'Este dispositivo' : 'Dispositivo vinculado',\n        text: item.text,\n        ownedByMe: true,\n      },\n    }))\n    for (const item of generalTargetedItems) {\n      if (item.expiresAt <= now || localPreservedIds.has(item.id)) continue\n      entries.push({\n        createdAt: item.createdAt,\n        card: {\n          id: item.id,\n          type: 'text',\n          author: 'Dispositivo vinculado',\n          text: item.text,\n          ownedByMe: true,\n        },\n      })\n    }\n    return entries.sort((a, b) => b.createdAt - a.createdAt).map((entry) => entry.card)\n  }, [generalItems, generalTargetedItems, identity?.deviceId, localPreservedIds])\n",
-          )
-          replace_once(
-              app,
-              "            {isGeneralView && (\n              <ClipboardComposer\n                disabled={!canSyncRealGeneral}\n                cloudConnected={visibleCloudConnectivity === 'online'}\n                onSend={sendGeneralText}\n              />\n            )}\n",
-              "            {isGeneralView && (\n              <ClipboardComposer\n                disabled={!canUseRealGeneral}\n                cloudConnected={visibleCloudConnectivity === 'online'}\n                routeText=\"Elige un dispositivo al enviar\"\n                resetKey={generalComposerResetKey}\n                onSend={stageGeneralText}\n              />\n            )}\n",
-          )
-          replace_once(
-              app,
-              "                  onDelete={isLocalView ? deleteLocalText : isGeneralView ? deleteGeneralText : (id) => setMockItems((current) => current.filter((entry) => entry.id !== id))}\n",
-              "                  onDelete={isLocalView ? deleteLocalText : isGeneralView ? deleteGeneralVisibleText : (id) => setMockItems((current) => current.filter((entry) => entry.id !== id))}\n",
-          )
-          replace_once(
-              app,
-              "      <ThemePicker open={appearanceOpen} value={themePreference} onChange={changeTheme} onClose={() => setAppearanceOpen(false)} />\n      <LocalClipboardSharePanel\n",
-              "      <ThemePicker open={appearanceOpen} value={themePreference} onChange={changeTheme} onClose={() => setAppearanceOpen(false)} />\n      <GeneralDestinationPanel\n        open={generalDestinationOpen}\n        identity={identity}\n        identityStatus={identityStatus}\n        onClose={() => {\n          setGeneralDestinationOpen(false)\n          setPendingGeneralText(null)\n        }}\n        onSelect={sendGeneralTextToDestination}\n      />\n      <LocalClipboardSharePanel\n",
-          )
+              'preserve dependencies')
 
-          composer = 'src/components/ClipboardComposer.tsx'
-          replace_once(
-              composer,
-              "import { ClipboardEvent, FormEvent, useState, useSyncExternalStore } from 'react'\n",
-              "import { ClipboardEvent, FormEvent, useEffect, useState, useSyncExternalStore } from 'react'\n",
-          )
-          replace_once(
-              composer,
-              "  textareaId = 'general-text',\n  onSend,\n",
-              "  textareaId = 'general-text',\n  resetKey = 0,\n  onSend,\n",
-          )
-          replace_once(
-              composer,
-              "  textareaId?: string\n  onSend: (text: string) => Promise<void>\n",
-              "  textareaId?: string\n  resetKey?: number\n  onSend: (text: string) => Promise<void | boolean>\n",
-          )
-          replace_once(
-              composer,
-              "  const localClipboard = textareaId === 'local-text'\n\n  const submit = async (event: FormEvent) => {\n",
-              "  const localClipboard = textareaId === 'local-text'\n\n  useEffect(() => {\n    setText('')\n    setError(null)\n  }, [resetKey])\n\n  const submit = async (event: FormEvent) => {\n",
-          )
-          replace_once(
-              composer,
-              "      await onSend(text)\n      setText('')\n",
-              "      const shouldClear = await onSend(text)\n      if (shouldClear !== false) setText('')\n",
-          )
+          image_effect = """  useEffect(() => {
+    const roomId = identity?.generalRoomId
+    if (!roomId || !identity.persisted) return
+    return subscribeLocalImageDirectReceipts(roomId, () => {
+      flash('Imagen recibida por Directo local')
+    })
+  }, [flash, identity?.generalRoomId, identity?.persisted])
+"""
+          targeted_effect = """
 
-          Path('tests/generalTargetedUiWiring.test.ts').write_text("""import assert from 'node:assert/strict'\nimport { readFile } from 'node:fs/promises'\nimport test from 'node:test'\n\nconst appPath = new URL('../src/App.tsx', import.meta.url)\nconst composerPath = new URL('../src/components/ClipboardComposer.tsx', import.meta.url)\n\ntest('General exige destino explícito y conserva el texto si se cancela el selector', async () => {\n  const app = await readFile(appPath, 'utf8')\n  const composer = await readFile(composerPath, 'utf8')\n\n  assert.match(app, /GeneralDestinationPanel/)\n  assert.match(app, /sendGeneralTargetedText\(roomId, deviceId, text\)/)\n  assert.match(app, /routeText=\"Elige un dispositivo al enviar\"/)\n  assert.match(app, /return false/)\n  assert.match(composer, /shouldClear !== false/)\n  assert.match(composer, /resetKey/)\n})\n\ntest('General mantiene recepción dirigida mientras OACLIX está abierta', async () => {\n  const app = await readFile(appPath, 'utf8')\n\n  assert.match(app, /ensureClipboardRoomForegroundReception\(roomId\)/)\n  assert.match(app, /suspendClipboardRoomForegroundReception\(roomId\)/)\n  assert.match(app, /subscribeGeneralTargetedReceipts/)\n  assert.match(app, /readGeneralTargetedInbox\(roomId\)/)\n})\n\ntest('los textos dirigidos se borran localmente sin emitir delete compartido', async () => {\n  const app = await readFile(appPath, 'utf8')\n\n  assert.match(app, /generalTargetedItems\.some/)\n  assert.match(app, /deleteGeneralTargetedInboxItem\(roomId, itemId\)/)\n  assert.match(app, /await deleteGeneralText\(itemId\)/)\n})\n""")
+  useEffect(() => {
+    let cancelled = false
+    const roomId = identity?.generalRoomId
+    setGeneralTargetedItems([])
+    if (!roomId || !identity.persisted) return () => { cancelled = true }
+
+    const mergeTargeted = (items: GeneralTargetedInboxItem[]) => {
+      setGeneralTargetedItems((current) => {
+        const merged = new Map(current.map((item) => [item.id, item]))
+        for (const item of items) merged.set(item.id, item)
+        return Array.from(merged.values())
+          .filter((item) => item.expiresAt > Date.now())
+          .sort((a, b) => b.createdAt - a.createdAt || b.id.localeCompare(a.id))
+      })
+    }
+
+    void readGeneralTargetedInbox(roomId)
+      .then((items) => { if (!cancelled) mergeTargeted(items) })
+      .catch(() => undefined)
+    const unsubscribe = subscribeGeneralTargetedReceipts(roomId, ({ item, delivery }) => {
+      if (cancelled) return
+      mergeTargeted([item])
+      flash(delivery === 'direct'
+        ? 'Texto recibido en General por Directo'
+        : 'Texto recibido en General por Nube')
+    })
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
+  }, [flash, identity?.generalRoomId, identity?.persisted])
+"""
+          app = replace_once(app, image_effect, image_effect + targeted_effect, 'targeted inbox effect')
+
+          connectivity_effect = """  useEffect(() => {
+    const roomId = identity?.generalRoomId
+    if (!connectedSurfaceMode || !roomId || !identity.persisted) return
+
+    if (connectedSurfaceMode === 'content') ensureClipboardRoomConnectivity(roomId)
+    else ensureClipboardRoomControlConnectivity(roomId)
+    return () => suspendClipboardRoomConnectivity(roomId)
+  }, [connectedSurfaceMode, identity?.generalRoomId, identity?.persisted])
+"""
+          foreground_effect = """
+
+  useEffect(() => {
+    const roomId = identity?.generalRoomId
+    if (!roomId || !identity.persisted) return
+    ensureClipboardRoomForegroundReception(roomId)
+    return () => suspendClipboardRoomForegroundReception(roomId)
+  }, [identity?.generalRoomId, identity?.persisted])
+"""
+          app = replace_once(app, connectivity_effect, connectivity_effect + foreground_effect, 'foreground receiver effect')
+
+          app = sub_once(app,
+              r"  const recentGeneralCardItems = useMemo<ClipboardItem\[]>\(.*?\n\n  const syncLabel =",
+              """  const recentGeneralCardItems = useMemo<ClipboardItem[]>(() => {
+    const now = Date.now()
+    const entries: Array<{ createdAt: number; card: ClipboardItem }> = selectRecentGeneralTexts(
+      generalItems,
+      localPreservedIds,
+      now,
+    ).map((item) => ({
+      createdAt: item.createdAt,
+      card: {
+        id: item.id,
+        type: 'text',
+        author: item.authorDeviceId === identity?.deviceId ? 'Este dispositivo' : 'Dispositivo vinculado',
+        text: item.text,
+        ownedByMe: true,
+      },
+    }))
+    for (const item of generalTargetedItems) {
+      if (item.expiresAt <= now || localPreservedIds.has(item.id)) continue
+      entries.push({
+        createdAt: item.createdAt,
+        card: {
+          id: item.id,
+          type: 'text',
+          author: 'Dispositivo vinculado',
+          text: item.text,
+          ownedByMe: true,
+        },
+      })
+    }
+    return entries.sort((a, b) => b.createdAt - a.createdAt).map((entry) => entry.card)
+  }, [generalItems, generalTargetedItems, identity?.deviceId, localPreservedIds])
+
+  const syncLabel =""",
+              'General recent cards')
+          app = replace_once(app,
+              """            {isGeneralView && (
+              <ClipboardComposer
+                disabled={!canSyncRealGeneral}
+                cloudConnected={visibleCloudConnectivity === 'online'}
+                onSend={sendGeneralText}
+              />
+            )}
+""",
+              """            {isGeneralView && (
+              <ClipboardComposer
+                disabled={!canUseRealGeneral}
+                cloudConnected={visibleCloudConnectivity === 'online'}
+                routeText="Elige un dispositivo al enviar"
+                resetKey={generalComposerResetKey}
+                onSend={stageGeneralText}
+              />
+            )}
+""",
+              'General composer')
+          app = replace_once(app,
+              "onDelete={isLocalView ? deleteLocalText : isGeneralView ? deleteGeneralText : (id) => setMockItems((current) => current.filter((entry) => entry.id !== id))}",
+              "onDelete={isLocalView ? deleteLocalText : isGeneralView ? deleteGeneralVisibleText : (id) => setMockItems((current) => current.filter((entry) => entry.id !== id))}",
+              'General delete handler')
+          app = replace_once(app,
+              "      <LocalClipboardSharePanel\n",
+              """      <GeneralDestinationPanel
+        open={generalDestinationOpen}
+        identity={identity}
+        identityStatus={identityStatus}
+        onClose={() => {
+          setGeneralDestinationOpen(false)
+          setPendingGeneralText(null)
+        }}
+        onSelect={sendGeneralTextToDestination}
+      />
+      <LocalClipboardSharePanel
+""",
+              'General destination panel render')
+          app_path.write_text(app)
+
+          composer_path = Path('src/components/ClipboardComposer.tsx')
+          composer = composer_path.read_text()
+          composer = replace_once(composer,
+              "import { ClipboardEvent, FormEvent, useState, useSyncExternalStore } from 'react'",
+              "import { ClipboardEvent, FormEvent, useEffect, useState, useSyncExternalStore } from 'react'",
+              'composer useEffect import')
+          composer = replace_once(composer,
+              "  textareaId = 'general-text',\n  onSend,",
+              "  textareaId = 'general-text',\n  resetKey = 0,\n  onSend,",
+              'composer resetKey argument')
+          composer = replace_once(composer,
+              "  textareaId?: string\n  onSend: (text: string) => Promise<void>",
+              "  textareaId?: string\n  resetKey?: number\n  onSend: (text: string) => Promise<void | boolean>",
+              'composer callback type')
+          composer = replace_once(composer,
+              "  const localClipboard = textareaId === 'local-text'\n\n  const submit",
+              """  const localClipboard = textareaId === 'local-text'
+
+  useEffect(() => {
+    setText('')
+    setError(null)
+  }, [resetKey])
+
+  const submit""",
+              'composer reset effect')
+          composer = replace_once(composer,
+              "      await onSend(text)\n      setText('')",
+              "      const shouldClear = await onSend(text)\n      if (shouldClear !== false) setText('')",
+              'composer retain staged text')
+          composer_path.write_text(composer)
+
+          Path('tests/generalTargetedUiWiring.test.ts').write_text("""import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
+import test from 'node:test'
+
+const appPath = new URL('../src/App.tsx', import.meta.url)
+const composerPath = new URL('../src/components/ClipboardComposer.tsx', import.meta.url)
+
+test('General exige destino explícito y conserva el texto si se cancela el selector', async () => {
+  const app = await readFile(appPath, 'utf8')
+  const composer = await readFile(composerPath, 'utf8')
+  assert.match(app, /GeneralDestinationPanel/)
+  assert.match(app, /sendGeneralTargetedText\(roomId, deviceId, text\)/)
+  assert.match(app, /routeText="Elige un dispositivo al enviar"/)
+  assert.match(app, /return false/)
+  assert.match(composer, /shouldClear !== false/)
+  assert.match(composer, /resetKey/)
+})
+
+test('General mantiene recepción dirigida mientras OACLIX está abierta', async () => {
+  const app = await readFile(appPath, 'utf8')
+  assert.match(app, /ensureClipboardRoomForegroundReception\(roomId\)/)
+  assert.match(app, /suspendClipboardRoomForegroundReception\(roomId\)/)
+  assert.match(app, /subscribeGeneralTargetedReceipts/)
+  assert.match(app, /readGeneralTargetedInbox\(roomId\)/)
+})
+
+test('los textos dirigidos se borran localmente sin emitir delete compartido', async () => {
+  const app = await readFile(appPath, 'utf8')
+  assert.match(app, /generalTargetedItems\.some/)
+  assert.match(app, /deleteGeneralTargetedInboxItem\(roomId, itemId\)/)
+  assert.match(app, /await deleteGeneralText\(itemId\)/)
+})
+""")
           PY
 
       - name: Install dependencies
