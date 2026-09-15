@@ -8,8 +8,10 @@ const DATABASE_NAME = 'oaclix-local-images'
 const STORE_NAME = 'image-items'
 const DEVICE_ID_PATTERN = /^dev_[A-Za-z0-9_-]{16,64}$/
 const ITEM_ID_PATTERN = /^itm_[a-f0-9]{32}$/
+const NATIVE_IMAGE_ID_PATTERN = /^[0-9a-fA-F-]{36}$/
 const CLOCK_SKEW_MS = 300_000
 const SUPPORTED_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
+const encoder = new TextEncoder()
 
 export type LocalImageClipboardSnapshot = {
   id: string
@@ -27,7 +29,16 @@ export type ReceivedLocalImageMetadata = Pick<
   'id' | 'mimeType' | 'byteSize' | 'createdAt' | 'expiresAt'
 >
 
+type NativeLocalImageSnapshot = {
+  id: string
+  mimeType: string
+  byteSize: number
+  createdAt: number
+  expiresAt: number
+}
+
 let mutationQueue: Promise<void> = Promise.resolve()
+let nativeImportPromise: Promise<void> | null = null
 
 function openDatabase() {
   return new Promise<IDBDatabase>((resolve, reject) => {
@@ -55,6 +66,33 @@ function createLocalImageId() {
   const bytes = new Uint8Array(16)
   globalThis.crypto.getRandomValues(bytes)
   return `itm_${Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('')}`
+}
+
+async function nativeLocalImageId(nativeId: string) {
+  const digest = await crypto.subtle.digest('SHA-256', encoder.encode(`oaclix-android-image|${nativeId}`))
+  return `itm_${Array.from(new Uint8Array(digest).slice(0, 16), (value) => value.toString(16).padStart(2, '0')).join('')}`
+}
+
+function validNativeImage(value: unknown): value is NativeLocalImageSnapshot {
+  if (!value || typeof value !== 'object') return false
+  const item = value as Partial<NativeLocalImageSnapshot>
+  return typeof item.id === 'string'
+    && NATIVE_IMAGE_ID_PATTERN.test(item.id)
+    && typeof item.mimeType === 'string'
+    && SUPPORTED_MIME_TYPES.has(item.mimeType)
+    && Number.isSafeInteger(item.byteSize)
+    && Number(item.byteSize) > 0
+    && Number.isSafeInteger(item.createdAt)
+    && Number.isSafeInteger(item.expiresAt)
+    && Number(item.expiresAt) > Number(item.createdAt)
+    && Number(item.expiresAt) - Number(item.createdAt) === LOCAL_IMAGE_RETENTION_MS
+}
+
+function parseNativeImages(raw: string) {
+  const value = JSON.parse(raw) as unknown
+  if (!Array.isArray(value)) throw new Error('Android devolvió una lista de imágenes inválida')
+  if (!value.every(validNativeImage)) throw new Error('Android devolvió metadatos de imagen inválidos')
+  return value
 }
 
 export function isLocalImageClipboardSnapshot(value: unknown): value is LocalImageClipboardSnapshot {
@@ -179,6 +217,40 @@ async function writeItem(item: LocalImageClipboardSnapshot) {
   }
 }
 
+async function importNativeLocalImages(now: number) {
+  const bridge = window.OaclixNative
+  if (!bridge) return
+  if (nativeImportPromise) return nativeImportPromise
+
+  nativeImportPromise = (async () => {
+    const nativeItems = parseNativeImages(bridge.listLocalImages())
+    for (const item of nativeItems) {
+      if (item.expiresAt <= now) {
+        bridge.deleteLocalImage(item.id)
+        continue
+      }
+      if (item.createdAt > now + CLOCK_SKEW_MS) continue
+
+      try {
+        const response = await fetch(`/app-native/image/${encodeURIComponent(item.id)}`, { cache: 'no-store' })
+        if (!response.ok) continue
+        const blob = await response.blob()
+        if (blob.type !== item.mimeType || blob.size !== item.byteSize) continue
+
+        const webItem = prepareLocalImageBlob(blob, item.createdAt, await nativeLocalImageId(item.id))
+        await enqueueMutation(() => writeItem(webItem))
+        bridge.deleteLocalImage(item.id)
+      } catch {
+        // Conservamos el original nativo para reintentar en la siguiente apertura.
+      }
+    }
+  })().finally(() => {
+    nativeImportPromise = null
+  })
+
+  return nativeImportPromise
+}
+
 async function deleteKeys(keys: IDBValidKey[]) {
   if (keys.length === 0) return
   const database = await openDatabase()
@@ -196,6 +268,7 @@ async function deleteKeys(keys: IDBValidKey[]) {
 }
 
 export async function readLocalImages(now = Date.now()) {
+  await importNativeLocalImages(now)
   const database = await openDatabase()
   try {
     const { values, keys } = await new Promise<{ values: unknown[]; keys: IDBValidKey[] }>((resolve, reject) => {
