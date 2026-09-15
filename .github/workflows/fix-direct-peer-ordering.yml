@@ -1,0 +1,91 @@
+name: Fix Direct peer ordering
+
+on:
+  push:
+    branches: [feat/android-direct-image-native]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fix-direct-peer-ordering
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: feat/android-direct-image-native
+          persist-credentials: true
+
+      - name: Apply stable cross-platform ordering
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          manager_path = Path('src/realtime/lanPeerManager.ts')
+          manager = manager_path.read_text()
+          anchor = "import { publishCloudSyncHint } from './cloudSyncHintBus'\n"
+          if manager.count(anchor) != 1:
+              raise SystemExit('Import anchor changed')
+          manager = manager.replace(
+              anchor,
+              anchor + "import { localDeviceInitiatesDirect } from './directPeerOrdering'\n",
+              1,
+          )
+
+          replacements = {
+              "ownDeviceId.localeCompare(remoteDeviceId) < 0": "localDeviceInitiatesDirect(ownDeviceId, remoteDeviceId)",
+              "ownDeviceId.localeCompare(remoteDeviceId) >= 0": "!localDeviceInitiatesDirect(ownDeviceId, remoteDeviceId)",
+              "ownId.localeCompare(remoteDeviceId) >= 0": "!localDeviceInitiatesDirect(ownId, remoteDeviceId)",
+              "ownDeviceId.localeCompare(fromDeviceId) < 0": "localDeviceInitiatesDirect(ownDeviceId, fromDeviceId)",
+          }
+          expected_counts = {
+              "ownDeviceId.localeCompare(remoteDeviceId) < 0": 1,
+              "ownDeviceId.localeCompare(remoteDeviceId) >= 0": 2,
+              "ownId.localeCompare(remoteDeviceId) >= 0": 1,
+              "ownDeviceId.localeCompare(fromDeviceId) < 0": 1,
+          }
+          for old, new in replacements.items():
+              count = manager.count(old)
+              if count != expected_counts[old]:
+                  raise SystemExit(f'Unexpected ordering occurrence count for {old}: {count}')
+              manager = manager.replace(old, new)
+          if 'localeCompare(' in manager:
+              raise SystemExit('Locale-dependent Direct ordering remains')
+          manager_path.write_text(manager)
+
+          Path('src/realtime/directPeerOrdering.ts').write_text("""export function localDeviceInitiatesDirect(localDeviceId: string, remoteDeviceId: string) {\n  return localDeviceId !== remoteDeviceId && localDeviceId < remoteDeviceId\n}\n""")
+
+          Path('tests/directPeerOrdering.test.ts').write_text("""import assert from 'node:assert/strict'\nimport test from 'node:test'\n\nimport { localDeviceInitiatesDirect } from '../src/realtime/directPeerOrdering.ts'\n\ntest('Direct initiator ordering is stable across web and native ASCII device IDs', () => {\n  const upper = 'dev_Aaaaaaaaaaaaaaaa'\n  const lower = 'dev_aaaaaaaaaaaaaaaa'\n  assert.equal(localDeviceInitiatesDirect(upper, lower), true)\n  assert.equal(localDeviceInitiatesDirect(lower, upper), false)\n  assert.equal(localDeviceInitiatesDirect(upper, upper), false)\n})\n\ntest('Direct initiator ordering is complementary for distinct device IDs', () => {\n  const pairs = [\n    ['dev_0aaaaaaaaaaaaaaa', 'dev_Aaaaaaaaaaaaaaaa'],\n    ['dev_Zaaaaaaaaaaaaaaa', 'dev_aaaaaaaaaaaaaaaa'],\n    ['dev_-aaaaaaaaaaaaaaa', 'dev_0aaaaaaaaaaaaaaa'],\n    ['dev__aaaaaaaaaaaaaaa', 'dev_aaaaaaaaaaaaaaaa'],\n  ] as const\n  for (const [left, right] of pairs) {\n    assert.notEqual(\n      localDeviceInitiatesDirect(left, right),\n      localDeviceInitiatesDirect(right, left),\n    )\n  }\n})\n""")
+          PY
+
+      - name: Remove temporary workflow
+        run: rm .github/workflows/fix-direct-peer-ordering.yml
+
+      - name: Verify patch shape
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          test ! -e .github/workflows/fix-direct-peer-ordering.yml
+          test -f src/realtime/directPeerOrdering.ts
+          test -f tests/directPeerOrdering.test.ts
+          ! grep -q 'localeCompare(' src/realtime/lanPeerManager.ts
+
+      - name: Commit ordering fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Use stable Direct peer ordering across web and Android'
+          git push origin HEAD:feat/android-direct-image-native
