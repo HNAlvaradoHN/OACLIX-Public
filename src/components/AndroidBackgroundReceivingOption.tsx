@@ -31,10 +31,10 @@ export function AndroidBackgroundReceivingOption() {
     >
       <span className="settings-menu__icon"><Icon name="devices" /></span>
       <span>
-        <strong>Recepción en segundo plano</strong>
+        <strong>Imágenes Directo en segundo plano</strong>
         <small>{enabled
-          ? 'Activa · Android mantiene Directo disponible fuera de OACLIX'
-          : 'Desactivada · Directo funciona mientras OACLIX está abierta'}</small>
+          ? 'Activa · Android puede recibir imágenes aunque OACLIX no esté en pantalla'
+          : 'Desactivada · las imágenes Directo requieren OACLIX abierta'}</small>
       </span>
       <strong>{enabled ? 'Sí' : 'No'}</strong>
     </button>
