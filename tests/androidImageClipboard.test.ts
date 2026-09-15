@@ -46,32 +46,26 @@ test('OACLIX exposes image clipboard entries through a read-only provider', asyn
   assert.match(provider, /isExpired\(file\)/)
 })
 
-test('Mi portapapeles imports images, shows real thumbnails and copies them back ready to paste', async () => {
-  const [activity, rowLayout, decoder, strings] = await Promise.all([
+test('la PWA es la superficie de imágenes y Android conserva almacenamiento/copia nativos sin duplicar esa UI', async () => {
+  const [mainActivity, shelf, clipboard, receiver, decoder] = await Promise.all([
     read('android/app/src/main/java/app/oaclix/android/MainActivity.kt'),
-    read('android/app/src/main/res/layout/item_local_clipboard.xml'),
+    read('src/components/LocalImageClipboardShelf.tsx'),
+    read('src/clipboard/imageSystemClipboard.ts'),
+    read('android/app/src/main/java/app/oaclix/android/ShareReceiverActivity.kt'),
     read('android/app/src/main/java/app/oaclix/android/imageclipboard/ImageThumbnailDecoder.kt'),
-    read('android/app/src/main/res/values/strings.xml'),
   ])
 
-  assert.match(activity, /ImageClipboardStore\(this\)/)
-  assert.match(activity, /contentResolver\.getType\(it\)/)
-  assert.match(activity, /mimeType\?\.startsWith\("image\/"\)/)
-  assert.match(activity, /imageStore\.createFromUri\(uri\)/)
-  assert.match(activity, /findViewById<ImageView>\(R\.id\.item_image_preview\)/)
-  assert.match(activity, /ImageThumbnailDecoder\.decode\(/)
-  assert.match(activity, /ClipData\.newUri\(contentResolver, getString\(R\.string\.image_clip_label\), uri\)/)
-  assert.match(activity, /clipboard\.setPrimaryClip\(clip\)/)
-  assert.match(activity, /toast\(getString\(R\.string\.image_copied\)\)/)
-  assert.match(activity, /imageStore\.delete\(item\)/)
-
-  assert.match(rowLayout, /@\+id\/item_image_preview/)
-  assert.match(rowLayout, /android:scaleType="centerCrop"/)
-  assert.match(rowLayout, /android:visibility="gone"/)
+  assert.match(mainActivity, /WebView\(this\)/)
+  assert.doesNotMatch(mainActivity, /ImageClipboardStore\(this\)|item_image_preview|ImageThumbnailDecoder/)
+  assert.match(shelf, /readLocalImages\(\)/)
+  assert.match(shelf, /URL\.createObjectURL\(image\.blob\)/)
+  assert.match(shelf, /<ClipboardCard/)
+  assert.match(shelf, /deleteLocalImage\(image\.id\)/)
+  assert.match(clipboard, /ClipboardItem/)
+  assert.match(receiver, /ImageClipboardStore\(this\)/)
+  assert.match(receiver, /imageStore\.createFromUri\(uri, mimeTypeHint = mimeType\)/)
   assert.match(decoder, /BitmapFactory\.Options\(\)\.apply \{ inJustDecodeBounds = true \}/)
   assert.match(decoder, /inSampleSize = sampleSize/)
-  assert.match(strings, /name="image_item_preview">Imagen\\n%1\$s · %2\$s</)
-  assert.match(strings, /name="image_copied">Imagen copiada · lista para Pegar</)
 })
 
 test('Android Sharesheet accepts one image and stores its original locally', async () => {
