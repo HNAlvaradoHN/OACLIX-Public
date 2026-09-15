@@ -52,6 +52,7 @@ jobs:
     timeout-minutes: 30
     env:
       OACLIX_ANDROID_VERSION_CODE: ${{ github.run_number }}
+      OACLIX_API_BASE_URL: ${{ secrets.OACLIX_API_BASE_URL }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -117,7 +118,14 @@ jobs:
 
       - name: Test and assemble Android
         working-directory: android
-        run: ./gradlew testDebugUnitTest assembleDebug --no-daemon
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle_args=(testDebugUnitTest assembleDebug --no-daemon)
+          if [[ -n "${OACLIX_API_BASE_URL:-}" ]]; then
+            gradle_args+=("-POACLIX_API_BASE_URL=${OACLIX_API_BASE_URL}")
+          fi
+          ./gradlew "${gradle_args[@]}"
 
       - name: Publish PR debug APK
         if: github.event_name == 'pull_request'
