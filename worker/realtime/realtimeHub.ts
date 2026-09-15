@@ -1,5 +1,6 @@
 import { DurableObject } from 'cloudflare:workers'
 import { parseDeviceRelayInput } from './deviceRelayProtocol'
+import { parseTransferControlInput } from './transferControlProtocol'
 
 type SocketAttachment = {
   roomId: string
@@ -22,7 +23,8 @@ type SignalMessage = {
 
 // A cloud-relayed image is capped at 10 MiB raw. Base64 expands it to ~13.98 MB;
 // keep the accepted JSON frame narrowly above that envelope while staying far
-// below the platform WebSocket message ceiling.
+// below the platform WebSocket message ceiling. The new transfer-control path
+// has its own small limit and never carries content bytes.
 const MAX_MESSAGE_LENGTH = 14_100_000
 const MAX_SIGNAL_LENGTH = 32_000
 const ROOM_ID_PATTERN = /^[A-Za-z0-9_-]{8,96}$/
@@ -128,6 +130,18 @@ export class RealtimeHub extends DurableObject {
         if (deviceId === current.deviceId) continue
         send(target.socket, { type: 'cloud-change', fromDeviceId: current.deviceId })
       }
+      return
+    }
+
+    const control = parseTransferControlInput(parsed, current.deviceId)
+    if (control) {
+      const target = latest.get(control.targetDeviceId)
+      if (!target || target.attachment.personId !== current.personId) return
+      send(target.socket, {
+        type: 'transfer-control',
+        fromDeviceId: current.deviceId,
+        message: control.message,
+      })
       return
     }
 
