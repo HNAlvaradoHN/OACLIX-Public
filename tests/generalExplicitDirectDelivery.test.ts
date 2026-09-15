@@ -18,6 +18,9 @@ function harness() {
   const events: string[] = []
   let sentChange: LanClipboardContentChange | null = null
   let preparedDestinations: string[] = []
+  let ackCancelled = false
+  let resolveAck: () => void = () => undefined
+  let rejectAck: (error: Error) => void = () => undefined
   const prep: LanDirectFirstPrepMeta = {
     version: 1,
     changeId: 'chg_abcdefghijklmnopqrstuv',
@@ -25,6 +28,11 @@ function harness() {
     authorSequence: 7,
     createdAt: now,
   }
+
+  const ackPromise = new Promise<void>((resolve, reject) => {
+    resolveAck = resolve
+    rejectAck = reject
+  })
 
   const dependencies: GeneralExplicitDirectDeliveryDependencies = {
     getLocalDeviceId: async () => {
@@ -45,6 +53,18 @@ function harness() {
       sentChange = change
       return true
     },
+    createAckWaiter: (_room, deviceId, ackPrep) => {
+      events.push(`wait-ack:${deviceId}:${ackPrep.changeId}`)
+      return {
+        promise: ackPromise.then(() => {
+          events.push('ack')
+        }),
+        cancel: () => {
+          ackCancelled = true
+          events.push('ack-cancelled')
+        },
+      }
+    },
     now: () => now,
     createItemId: () => itemId,
   }
@@ -52,19 +72,33 @@ function harness() {
   return {
     dependencies,
     events,
+    resolveAck,
+    rejectAck,
     getSentChange: () => sentChange,
     getPreparedDestinations: () => preparedDestinations,
+    wasAckCancelled: () => ackCancelled,
   }
 }
 
-test('General Directo prepara checkpoint para un único destino antes de enviar', async () => {
+test('General Directo prepara checkpoint para un único destino y confirma ACK antes de éxito', async () => {
   const state = harness()
-  const item = await deliverGeneralTextDirectlyToDevice(roomId, targetDeviceId, 'hola', state.dependencies)
+  const delivery = deliverGeneralTextDirectlyToDevice(roomId, targetDeviceId, 'hola', state.dependencies)
 
+  await new Promise((resolve) => setTimeout(resolve, 0))
   assert.deepEqual(state.getPreparedDestinations(), [targetDeviceId])
-  assert.deepEqual(state.events, ['local-device', 'person', 'checkpoint', `send:${targetDeviceId}`])
+  assert.deepEqual(state.events, [
+    'local-device',
+    'person',
+    'checkpoint',
+    `wait-ack:${targetDeviceId}:chg_abcdefghijklmnopqrstuv`,
+    `send:${targetDeviceId}`,
+  ])
+
+  state.resolveAck()
+  const item = await delivery
   assert.equal(item.sequence, 7)
   assert.equal(item.directOnly, true)
+  assert.equal(state.events.at(-1), 'ack')
 
   const change = state.getSentChange()
   assert.ok(change)
@@ -88,9 +122,10 @@ test('General Directo no envía si el checkpoint no pudo persistirse', async () 
     /preparar/,
   )
   assert.equal(state.events.some((event) => event.startsWith('send:')), false)
+  assert.equal(state.events.some((event) => event.startsWith('wait-ack:')), false)
 })
 
-test('General Directo falla si la ruta cambia después del checkpoint sin hacer broadcast', async () => {
+test('General Directo cancela espera de ACK si la ruta cambia después del checkpoint', async () => {
   const state = harness()
   state.dependencies.sendToPeer = (deviceId) => {
     state.events.push(`send-failed:${deviceId}`)
@@ -103,6 +138,19 @@ test('General Directo falla si la ruta cambia después del checkpoint sin hacer 
   )
   assert.deepEqual(state.getPreparedDestinations(), [targetDeviceId])
   assert.equal(state.events.includes(`send-failed:${targetDeviceId}`), true)
+  assert.equal(state.wasAckCancelled(), true)
+})
+
+test('General Directo no reporta éxito si el receptor no confirma almacenamiento', async () => {
+  const state = harness()
+  const delivery = deliverGeneralTextDirectlyToDevice(roomId, targetDeviceId, 'hola', state.dependencies)
+
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  state.rejectAck(new Error('sin ACK'))
+
+  await assert.rejects(delivery, /sin ACK/)
+  assert.equal(state.events.includes(`send:${targetDeviceId}`), true)
+  assert.equal(state.events.includes('ack'), false)
 })
 
 test('General Directo rechaza enviarse al propio dispositivo antes de crear contenido', async () => {
