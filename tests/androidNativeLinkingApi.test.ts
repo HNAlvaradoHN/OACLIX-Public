@@ -51,25 +51,26 @@ test('Android normaliza el código con el mismo alfabeto y longitud que el Worke
   assert.match(store, /LINK_CODE_LENGTH = 10/)
 })
 
-test('Sharesheet solo consulta roster y Vinculados delega administración en un flujo separado', async () => {
-  const [mainActivity, linkActivity, linkingFlow, shareReceiver, destinationSource, linkingApi, manifest, layout] = await Promise.all([
+test('Vinculados vive en la PWA mientras Sharesheet conserva solo el roster nativo necesario', async () => {
+  const [mainActivity, linkedPanel, linkingFlow, shareReceiver, destinationSource, linkingApi, manifest] = await Promise.all([
     read('android/app/src/main/java/app/oaclix/android/MainActivity.kt'),
-    read('android/app/src/main/java/app/oaclix/android/LinkDeviceActivity.kt'),
+    read('src/components/LinkedPanel.tsx'),
     read('android/app/src/main/java/app/oaclix/android/identity/NativeLinkingFlow.kt'),
     read('android/app/src/main/java/app/oaclix/android/ShareReceiverActivity.kt'),
     read('android/app/src/main/java/app/oaclix/android/share/NativeShareDestinationSource.kt'),
     read('android/app/src/main/java/app/oaclix/android/identity/NativeIdentityLinkingApi.kt'),
     read('android/app/src/main/AndroidManifest.xml'),
-    read('android/app/src/main/res/layout/activity_link_device.xml'),
   ])
 
-  assert.doesNotMatch(mainActivity, /NativeIdentityLinkingApi|identity\.link\.|devices\/list/)
-  assert.match(mainActivity, /LinkDeviceActivity/)
-  assert.match(linkActivity, /NativeLinkingFlow/)
-  assert.doesNotMatch(linkActivity, /NativeIdentityLinkingApi|NativeIdentityApi/)
-  assert.match(linkActivity, /generateCode/)
-  assert.match(linkActivity, /renameDevice/)
-  assert.match(linkActivity, /unlinkDevice/)
+  assert.match(mainActivity, /WebView\(this\)/)
+  assert.doesNotMatch(mainActivity, /NativeIdentityLinkingApi|identity\.link\.|devices\/list|LinkDeviceActivity/)
+  assert.match(linkedPanel, /createDeviceLinkCode/)
+  assert.match(linkedPanel, /consumeDeviceLinkCode/)
+  assert.match(linkedPanel, /listLinkedDevices/)
+  assert.match(linkedPanel, /renameLinkedDevice/)
+  assert.match(linkedPanel, /unlinkLinkedDevice/)
+  assert.match(linkedPanel, /subscribeDirectLanStatus/)
+
   assert.match(linkingFlow, /NativeIdentityApi/)
   assert.match(linkingFlow, /consumeLinkCode/)
   assert.match(linkingFlow, /listLinkedDevices/)
@@ -77,12 +78,9 @@ test('Sharesheet solo consulta roster y Vinculados delega administración en un 
   assert.match(linkingFlow, /renameLinkedDevice/)
   assert.match(linkingFlow, /unlinkLinkedDevice/)
   assert.doesNotMatch(linkingFlow, /rotateRevoked|revokeLinkedDevice|revokeAndLoad/)
-  assert.match(layout, /generated_link_code/)
-  assert.match(layout, /linked_devices_container/)
-  assert.match(layout, /refresh_linked_devices_button/)
+
   assert.match(manifest, /android:name="\.LinkDeviceActivity"/)
   assert.match(manifest, /android:name="\.LinkDeviceActivity"[\s\S]*?android:exported="false"/)
-
   assert.match(shareReceiver, /NativeShareDestinationSource/)
   assert.doesNotMatch(shareReceiver, /NativeIdentityLinkingApi|createLinkCode|consumeLinkCode|identity\.link\.create|identity\.link\.consume/)
   assert.match(destinationSource, /NativeIdentityApi/)
