@@ -33,6 +33,26 @@ export type SignedDeviceAction<TPayload> = {
   signature: string
 }
 
+type NativeProof = {
+  version: 1
+  publicKey: PublicDeviceKey
+  timestamp: number
+  nonce: string
+  signature: string
+}
+
+type OaclixNativeBridge = {
+  getDeviceId(): string
+  createBootstrapProof(): string
+  signAction(action: string, payloadJson: string): string
+}
+
+declare global {
+  interface Window {
+    OaclixNative?: OaclixNativeBridge
+  }
+}
+
 export class DeviceIdentityApiError extends Error {
   readonly statusCode: number
 
@@ -48,6 +68,29 @@ const STORE_NAME = 'credentials'
 const RECORD_KEY = 'primary-device'
 const DEVICE_LABEL = 'Este dispositivo'
 const encoder = new TextEncoder()
+
+function nativeBridge() {
+  return window.OaclixNative ?? null
+}
+
+function parseNativeProof(raw: string): NativeProof {
+  const value = JSON.parse(raw) as Partial<NativeProof>
+  const key = value.publicKey
+  if (
+    value.version !== 1 ||
+    !key ||
+    key.kty !== 'EC' ||
+    key.crv !== 'P-256' ||
+    typeof key.x !== 'string' ||
+    typeof key.y !== 'string' ||
+    typeof value.timestamp !== 'number' ||
+    typeof value.nonce !== 'string' ||
+    typeof value.signature !== 'string'
+  ) {
+    throw new Error('Android devolvió una prueba de identidad inválida')
+  }
+  return value as NativeProof
+}
 
 function toBase64Url(bytes: Uint8Array) {
   let binary = ''
@@ -151,7 +194,18 @@ async function getOrCreateCredential() {
   return { credential: await createCredential(), createdLocally: true }
 }
 
+export function isAndroidNativeShell() {
+  return nativeBridge() !== null
+}
+
 export async function getLocalDeviceId() {
+  const bridge = nativeBridge()
+  if (bridge) {
+    const deviceId = bridge.getDeviceId()
+    if (!deviceId.startsWith('dev_')) throw new Error('Android devolvió un deviceId inválido')
+    return deviceId
+  }
+
   const credential = await readCredential()
   if (!credential) throw new Error('Identidad local no disponible')
   const digest = await publicKeyDigest(credential.publicKey)
@@ -159,6 +213,12 @@ export async function getLocalDeviceId() {
 }
 
 export async function signDeviceAction<TPayload>(action: string, payload: TPayload): Promise<SignedDeviceAction<TPayload>> {
+  const bridge = nativeBridge()
+  if (bridge) {
+    const proof = parseNativeProof(bridge.signAction(action, JSON.stringify(payload)))
+    return { ...proof, payload }
+  }
+
   if (!window.isSecureContext || !crypto.subtle) throw new Error('OACLIX necesita un contexto HTTPS seguro')
 
   const credential = await readCredential()
@@ -185,29 +245,16 @@ export async function signDeviceAction<TPayload>(action: string, payload: TPaylo
   }
 }
 
-export async function bootstrapDeviceIdentity(): Promise<DeviceIdentitySnapshot> {
-  if (!window.isSecureContext || !crypto.subtle) throw new Error('OACLIX necesita un contexto HTTPS seguro')
-
-  const { credential, createdLocally } = await getOrCreateCredential()
-  const timestamp = Date.now()
-  const nonce = randomNonce()
-  const digest = await publicKeyDigest(credential.publicKey)
-  const message = `oaclix-bootstrap|1|${timestamp}|${nonce}|${digest}`
-  const signature = await crypto.subtle.sign(
-    { name: 'ECDSA', hash: 'SHA-256' },
-    credential.privateKey,
-    encoder.encode(message),
-  )
-
+async function postBootstrapProof(proof: NativeProof, createdLocally: boolean): Promise<DeviceIdentitySnapshot> {
   const response = await fetch('/api/identity/bootstrap', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      version: 1,
-      publicKey: credential.publicKey,
-      timestamp,
-      nonce,
-      signature: toBase64Url(new Uint8Array(signature)),
+      version: proof.version,
+      publicKey: proof.publicKey,
+      timestamp: proof.timestamp,
+      nonce: proof.nonce,
+      signature: proof.signature,
       deviceLabel: DEVICE_LABEL,
     }),
   })
@@ -242,4 +289,33 @@ export async function bootstrapDeviceIdentity(): Promise<DeviceIdentitySnapshot>
     persisted: Boolean(data.persisted),
     generalRoomId: data.generalRoomId ?? null,
   }
+}
+
+export async function bootstrapDeviceIdentity(): Promise<DeviceIdentitySnapshot> {
+  const bridge = nativeBridge()
+  if (bridge) {
+    const proof = parseNativeProof(bridge.createBootstrapProof())
+    return postBootstrapProof(proof, false)
+  }
+
+  if (!window.isSecureContext || !crypto.subtle) throw new Error('OACLIX necesita un contexto HTTPS seguro')
+
+  const { credential, createdLocally } = await getOrCreateCredential()
+  const timestamp = Date.now()
+  const nonce = randomNonce()
+  const digest = await publicKeyDigest(credential.publicKey)
+  const message = `oaclix-bootstrap|1|${timestamp}|${nonce}|${digest}`
+  const signature = await crypto.subtle.sign(
+    { name: 'ECDSA', hash: 'SHA-256' },
+    credential.privateKey,
+    encoder.encode(message),
+  )
+
+  return postBootstrapProof({
+    version: 1,
+    publicKey: credential.publicKey,
+    timestamp,
+    nonce,
+    signature: toBase64Url(new Uint8Array(signature)),
+  }, createdLocally)
 }
