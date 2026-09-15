@@ -9,6 +9,7 @@ import {
   type LanDirectFirstPrepAck,
 } from './lanDirectFirstPrep'
 import { publishCloudSyncHint } from './cloudSyncHintBus'
+import { localDeviceInitiatesDirect } from './directPeerOrdering'
 import {
   localDirectCapabilities,
   resolveRemoteDirectCapabilities,
@@ -472,7 +473,7 @@ export class LanPeerManager {
     const sessionId = this.remoteSessions.get(remoteDeviceId) ?? peer?.sessionId ?? ''
     const role = !ownDeviceId
       ? 'unknown'
-      : ownDeviceId.localeCompare(remoteDeviceId) < 0 ? 'initiator' : 'responder'
+      : localDeviceInitiatesDirect(ownDeviceId, remoteDeviceId) ? 'initiator' : 'responder'
     const negotiationSuffix = peer
       ? `${peer.negotiationGeneration}/${peer.negotiationId.slice(-6).toUpperCase()}`
       : '—'
@@ -595,7 +596,7 @@ export class LanPeerManager {
       || document.visibilityState !== 'visible'
       || !this.signalClient
       || !ownDeviceId
-      || ownDeviceId.localeCompare(remoteDeviceId) >= 0
+      || !localDeviceInitiatesDirect(ownDeviceId, remoteDeviceId)
       || !this.remoteSessions.has(remoteDeviceId)
       || this.directRetryTimers.has(remoteDeviceId)
     ) return
@@ -616,7 +617,7 @@ export class LanPeerManager {
 
       const sessionId = this.remoteSessions.get(remoteDeviceId)
       const ownId = this.ownDeviceId
-      if (!sessionId || !ownId || ownId.localeCompare(remoteDeviceId) >= 0) return
+      if (!sessionId || !ownId || !localDeviceInitiatesDirect(ownId, remoteDeviceId)) return
 
       const existing = this.peers.get(remoteDeviceId)
       if (existing?.validated && existing.channel?.readyState === 'open') {
@@ -721,7 +722,7 @@ export class LanPeerManager {
 
     for (const [remoteDeviceId, sessionId] of presentSessions) {
       this.publishDiagnostic(remoteDeviceId, 'presence')
-      if (ownDeviceId.localeCompare(remoteDeviceId) >= 0) continue
+      if (!localDeviceInitiatesDirect(ownDeviceId, remoteDeviceId)) continue
       await this.offerTo(remoteDeviceId, sessionId)
     }
   }
@@ -861,7 +862,7 @@ export class LanPeerManager {
         return
       }
 
-      const localIsInitiator = ownDeviceId.localeCompare(fromDeviceId) < 0
+      const localIsInitiator = localDeviceInitiatesDirect(ownDeviceId, fromDeviceId)
       if (localIsInitiator) {
         const existing = this.peers.get(fromDeviceId)
         if (
