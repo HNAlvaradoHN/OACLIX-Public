@@ -9,7 +9,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import app.oaclix.android.MainActivity
 import app.oaclix.android.R
 import app.oaclix.android.share.NativeImageReceiptBus
@@ -45,7 +47,9 @@ internal object BackgroundDirectRuntime {
 
 class BackgroundDirectAvailabilityService : Service() {
     private lateinit var relayController: NativeImageRelayForegroundController
+    private val handoffHandler = Handler(Looper.getMainLooper())
     private var receiverActive = false
+    private var pendingActivation: Runnable? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -78,22 +82,52 @@ class BackgroundDirectAvailabilityService : Service() {
 
     override fun onDestroy() {
         BackgroundDirectRuntime.detach(this)
+        cancelPendingActivation()
         if (::relayController.isInitialized) relayController.close()
         receiverActive = false
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+        }
         super.onDestroy()
     }
 
     internal fun refreshReceiverState() {
         if (!::relayController.isInitialized) return
         val shouldReceive = isEnabled(this) && !BackgroundDirectRuntime.mainVisible
-        if (shouldReceive == receiverActive) {
+
+        if (!shouldReceive) {
+            cancelPendingActivation()
+            if (receiverActive) {
+                receiverActive = false
+                relayController.stop()
+            }
             updateNotification(received = false)
             return
         }
 
-        receiverActive = shouldReceive
-        if (shouldReceive) relayController.start() else relayController.stop()
+        if (receiverActive || pendingActivation != null) {
+            updateNotification(received = false)
+            return
+        }
+
+        val activate = Runnable {
+            pendingActivation = null
+            if (!isEnabled(this) || BackgroundDirectRuntime.mainVisible) return@Runnable
+            receiverActive = true
+            relayController.start()
+            updateNotification(received = false)
+        }
+        pendingActivation = activate
+        handoffHandler.postDelayed(activate, BACKGROUND_HANDOFF_DELAY_MS)
         updateNotification(received = false)
+    }
+
+    private fun cancelPendingActivation() {
+        pendingActivation?.let(handoffHandler::removeCallbacks)
+        pendingActivation = null
     }
 
     private fun startForegroundCompat(notification: Notification) {
@@ -174,6 +208,7 @@ class BackgroundDirectAvailabilityService : Service() {
         private const val PREF_ENABLED = "enabled"
         private const val CHANNEL_ID = "oaclix-background-direct"
         private const val NOTIFICATION_ID = 2701
+        private const val BACKGROUND_HANDOFF_DELAY_MS = 500L
         private const val ACTION_DISABLE = "app.oaclix.android.action.DISABLE_BACKGROUND_DIRECT"
 
         private fun preferences(context: Context) =
