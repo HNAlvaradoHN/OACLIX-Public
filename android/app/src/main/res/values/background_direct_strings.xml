@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="background_direct_channel">Directo en segundo plano</string>
-    <string name="background_direct_channel_description">Mantiene OACLIX disponible para recibir desde dispositivos vinculados.</string>
-    <string name="background_direct_title">OACLIX disponible</string>
-    <string name="background_direct_active">Listo para recibir por Directo en segundo plano</string>
-    <string name="background_direct_foreground">Directo está activo dentro de OACLIX</string>
+    <string name="background_direct_channel">Imágenes Directo en segundo plano</string>
+    <string name="background_direct_channel_description">Mantiene OACLIX disponible para recibir imágenes por Directo desde dispositivos vinculados.</string>
+    <string name="background_direct_title">OACLIX disponible para imágenes</string>
+    <string name="background_direct_active">Listo para recibir imágenes por Directo en segundo plano</string>
+    <string name="background_direct_foreground">Las imágenes Directo las recibe OACLIX en pantalla</string>
     <string name="background_direct_received">Imagen recibida por Directo</string>
     <string name="background_direct_disable">Desactivar</string>
 </resources>
