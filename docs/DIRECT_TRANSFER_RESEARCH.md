@@ -243,6 +243,14 @@ La siguiente implementación debe hacerse en bloques pequeños, manteniendo OACL
 6. **Añadir Wi‑Fi Direct** para Android cercano/offline.
 7. Solo después estudiar Internet directo/NAT traversal y relay E2E con límite de costo seguro.
 
+## Resultado de la comparación
+
+**No reiniciar OACLIX. No seguir expandiendo la arquitectura Directo actual. Migrar la comunicación por capas.**
+
+La inversión ya hecha que sí vale la pena conservar está principalmente en identidad, vinculación, PWA, almacenamiento local, autenticación, presencia/señalización y primitivas de transferencia segura. El costo técnico innecesario está concentrado en usar el mismo WebSocket/WebRTC como presencia, transporte, fallback cloud y background, y en la complejidad de reconciliación creada alrededor de esa mezcla.
+
+La dirección aprobable técnicamente es convertir esas piezas en módulos independientes antes de añadir más transportes.
+
 ## Siguiente paso exacto
 
 No reiniciar OACLIX ni seguir parchando el receptor permanente. El siguiente cambio de código debe ser el bloque 1: **introducir el contrato de control para solicitudes de transferencia y separar los payloads de `RealtimeSignalClient`/`RealtimeHub`, sin eliminar aún el camino antiguo hasta que el nuevo contrato tenga pruebas y pueda migrarse por etapas**.
