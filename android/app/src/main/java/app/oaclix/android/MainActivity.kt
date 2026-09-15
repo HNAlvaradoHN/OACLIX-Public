@@ -12,17 +12,20 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import app.oaclix.android.identity.NativeIdentityApi
+import app.oaclix.android.imageclipboard.ImageClipboardStore
 import java.io.ByteArrayInputStream
 
 class MainActivity : Activity() {
     private lateinit var webView: WebView
     private lateinit var backendHost: String
+    private lateinit var imageStore: ImageClipboardStore
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         val backendBaseUrl = NativeIdentityApi.normalizeBaseUrl(getString(R.string.oaclix_api_base_url))
         backendHost = requireNotNull(Uri.parse(backendBaseUrl).host) { "Endpoint OACLIX inválido" }
+        imageStore = ImageClipboardStore(applicationContext)
 
         ServiceWorkerController.getInstance().serviceWorkerWebSettings.blockNetworkLoads = true
 
@@ -34,7 +37,7 @@ class MainActivity : Activity() {
             settings.allowContentAccess = false
             settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
             settings.setSupportMultipleWindows(false)
-            addJavascriptInterface(OaclixWebBridge(), NATIVE_BRIDGE_NAME)
+            addJavascriptInterface(OaclixWebBridge(applicationContext), NATIVE_BRIDGE_NAME)
             webViewClient = OaclixShellClient()
         }
 
@@ -59,11 +62,13 @@ class MainActivity : Activity() {
     private inner class OaclixShellClient : WebViewClient() {
         override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
             val url = request?.url ?: return null
-            if (url.scheme != "https" || url.host != backendHost || !url.path.orEmpty().startsWith(SHELL_PREFIX)) {
-                return null
-            }
+            if (url.scheme != "https" || url.host != backendHost) return null
 
-            val relativePath = url.path.orEmpty().removePrefix(SHELL_PREFIX).ifBlank { "index.html" }
+            val path = url.path.orEmpty()
+            if (path.startsWith(NATIVE_IMAGE_PREFIX)) return serveNativeImage(url)
+            if (!path.startsWith(SHELL_PREFIX)) return null
+
+            val relativePath = path.removePrefix(SHELL_PREFIX).ifBlank { "index.html" }
             if (!isSafeAssetPath(relativePath)) return notFound()
 
             return runCatching {
@@ -87,6 +92,25 @@ class MainActivity : Activity() {
             }
             return true
         }
+    }
+
+    private fun serveNativeImage(url: Uri): WebResourceResponse {
+        val id = url.lastPathSegment.orEmpty()
+        if (!NATIVE_IMAGE_ID.matches(id)) return notFound()
+        val item = imageStore.list().firstOrNull { it.id == id } ?: return notFound()
+        return runCatching {
+            WebResourceResponse(
+                item.mimeType,
+                null,
+                200,
+                "OK",
+                mapOf(
+                    "Cache-Control" to "no-store",
+                    "Content-Length" to item.byteSize.toString(),
+                ),
+                imageStore.openInputStream(item),
+            )
+        }.getOrElse { notFound() }
     }
 
     private fun isSafeAssetPath(path: String): Boolean {
@@ -119,7 +143,7 @@ class MainActivity : Activity() {
         "UTF-8",
         404,
         "Not Found",
-        emptyMap(),
+        mapOf("Cache-Control" to "no-store"),
         ByteArrayInputStream("Not Found".toByteArray(Charsets.UTF_8)),
     )
 
@@ -127,5 +151,7 @@ class MainActivity : Activity() {
         private const val NATIVE_BRIDGE_NAME = "OaclixNative"
         private const val SHELL_PREFIX = "/app/"
         private const val SHELL_INDEX_PATH = "/app/index.html"
+        private const val NATIVE_IMAGE_PREFIX = "/app-native/image/"
+        private val NATIVE_IMAGE_ID = Regex("[0-9a-fA-F-]{36}")
     }
 }
