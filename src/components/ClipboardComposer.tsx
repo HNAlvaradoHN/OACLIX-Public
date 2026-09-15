@@ -1,4 +1,4 @@
-import { ClipboardEvent, FormEvent, useState, useSyncExternalStore } from 'react'
+import { ClipboardEvent, FormEvent, useEffect, useState, useSyncExternalStore } from 'react'
 import { imageBlobFromPaste, readImageFromSystemClipboard } from '../clipboard/imageSystemClipboard'
 import { storeLocalImageBlob } from '../data/localImageClipboard'
 import { hasDirectLanPeer, subscribeDirectLanStatus } from '../realtime/lanStatus'
@@ -16,6 +16,7 @@ export function ClipboardComposer({
   busyLabel = 'Enviando…',
   routeText,
   textareaId = 'general-text',
+  resetKey = 0,
   onSend,
   onShareImage,
 }: {
@@ -26,7 +27,8 @@ export function ClipboardComposer({
   busyLabel?: string
   routeText?: string
   textareaId?: string
-  onSend: (text: string) => Promise<void>
+  resetKey?: number
+  onSend: (text: string) => Promise<void | boolean>
   onShareImage?: (item: ClipboardItem) => void
 }) {
   const [text, setText] = useState('')
@@ -42,6 +44,11 @@ export function ClipboardComposer({
   const visibleRoute = routeText ?? clipboardRouteLabel(directLanAvailable, cloudConnected)
   const localClipboard = textareaId === 'local-text'
 
+  useEffect(() => {
+    setText('')
+    setError(null)
+  }, [resetKey])
+
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     if (disabled || sending || text.trim().length === 0) return
@@ -49,8 +56,8 @@ export function ClipboardComposer({
     setSending(true)
     setError(null)
     try {
-      await onSend(text)
-      setText('')
+      const shouldClear = await onSend(text)
+      if (shouldClear !== false) setText('')
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'No se pudo guardar el texto')
     } finally {

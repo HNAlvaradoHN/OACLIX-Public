@@ -3,6 +3,7 @@ import { ClipboardCard } from './components/ClipboardCard'
 import { ClipboardComposer } from './components/ClipboardComposer'
 import { ConnectionsStoragePanel } from './components/ConnectionsStoragePanel'
 import { GeneralCard } from './components/GeneralCard'
+import { GeneralDestinationPanel } from './components/GeneralDestinationPanel'
 import { Icon } from './components/Icon'
 import { LinkedPanel } from './components/LinkedPanel'
 import { LocalClipboardSharePanel } from './components/LocalClipboardSharePanel'
@@ -13,9 +14,10 @@ import { RoomCard } from './components/RoomCard'
 import { SettingsMenu } from './components/SettingsMenu'
 import { ThemePicker } from './components/ThemePicker'
 import { UpdatePrompt } from './components/UpdatePrompt'
-import { createClipboardText, deleteClipboardText, ensureClipboardRoomConnectivity, ensureClipboardRoomControlConnectivity, listClipboardChanges, subscribeCloudClipboardSyncHints, subscribeDirectClipboardChanges, suspendClipboardRoomConnectivity, type ClipboardChange, type ClipboardTextSnapshot } from './data/clipboardApi'
+import { deleteClipboardText, ensureClipboardRoomConnectivity, ensureClipboardRoomControlConnectivity, ensureClipboardRoomForegroundReception, listClipboardChanges, subscribeCloudClipboardSyncHints, subscribeDirectClipboardChanges, suspendClipboardRoomConnectivity, suspendClipboardRoomForegroundReception, type ClipboardChange, type ClipboardTextSnapshot } from './data/clipboardApi'
 import { readGeneralClipboardCache, writeGeneralClipboardCache } from './data/clipboardCache'
 import { selectRecentGeneralTexts } from './data/generalClipboardView'
+import { deleteGeneralTargetedInboxItem, readGeneralTargetedInbox, type GeneralTargetedInboxItem } from './data/generalTargetedInbox'
 import { createLocalClipboardText, deleteLocalClipboardText, normalizeLocalClipboardTexts, readLocalClipboardTexts, type LocalClipboardTextSnapshot } from './data/localClipboard'
 import { readLocalImages, type LocalImageClipboardSnapshot } from './data/localImageClipboard'
 import { clipboardItems as initialItems, rooms } from './data/mockData'
@@ -26,6 +28,8 @@ import { serviceWorkerUpdateEvent } from './pwa/registerServiceWorker'
 import { subscribeCloudConnectivity, type CloudConnectivityStatus } from './realtime/cloudSyncHintBus'
 import { applyTheme, getThemePreference, saveThemePreference, type ThemePreference } from './theme/theme'
 import { classifyDirectSequence } from './transport/directCursorPolicy'
+import { subscribeGeneralTargetedReceipts } from './transport/generalTargetedReceiptBus'
+import { sendGeneralTargetedText } from './transport/generalTargetedTextTransport'
 import { sendLocalClipboardTextDirect, subscribeLocalClipboardDirectReceipts } from './transport/localClipboardDirectTransport'
 import { sendLocalImageDirect, subscribeLocalImageDirectReceipts } from './transport/localImageDirectTransport'
 import { keepCursorMonotonic, selectChangesAfterCursor } from './transport/syncCursorPolicy'
@@ -54,6 +58,10 @@ function App() {
   const [localImageShareItemId, setLocalImageShareItemId] = useState<string | null>(null)
   const [localImageShareItem, setLocalImageShareItem] = useState<LocalImageClipboardSnapshot | null>(null)
   const [generalItems, setGeneralItems] = useState<ClipboardTextSnapshot[]>([])
+  const [generalTargetedItems, setGeneralTargetedItems] = useState<GeneralTargetedInboxItem[]>([])
+  const [generalDestinationOpen, setGeneralDestinationOpen] = useState(false)
+  const [pendingGeneralText, setPendingGeneralText] = useState<string | null>(null)
+  const [generalComposerResetKey, setGeneralComposerResetKey] = useState(0)
   const [localPreservedItems, setLocalPreservedItems] = useState<ClipboardTextSnapshot[]>([])
   const [generalSyncStatus, setGeneralSyncStatus] = useState<GeneralSyncStatus>('idle')
   const [cloudConnectivity, setCloudConnectivity] = useState<CloudConnectivityStatus>('checking')
@@ -276,21 +284,27 @@ function App() {
     flash('Imagen enviada por Directo local')
   }, [flash, identity?.generalRoomId, identity?.persisted, localImageShareItem, localImageShareItemId])
 
-  const sendGeneralText = useCallback(async (text: string) => {
+  const stageGeneralText = useCallback(async (text: string) => {
     const roomId = identity?.generalRoomId
-    if (!roomId || !identity.persisted || !generalCacheReady) throw new Error('General todavía no está disponible en este dispositivo')
+    if (!roomId || !identity.persisted) throw new Error('General todavía no está disponible en este dispositivo')
+    setPendingGeneralText(text)
+    setGeneralDestinationOpen(true)
+    return false
+  }, [identity?.generalRoomId, identity?.persisted])
 
-    const result = await createClipboardText(roomId, text)
-    const nextItems = mergeGeneralItems([result.item])
-    persistGeneralCache(roomId, nextItems)
-    if (result.delivery === 'direct') {
-      flash('Texto enviado por Directo local')
-      return
-    }
+  const sendGeneralTextToDestination = useCallback(async (deviceId: string) => {
+    const roomId = identity?.generalRoomId
+    const text = pendingGeneralText
+    if (!roomId || !identity.persisted || !text) throw new Error('El texto de General ya no está disponible')
 
-    const synced = await syncGeneral()
-    flash(synced ? 'Texto enviado a General' : 'Texto guardado; actualización pendiente')
-  }, [flash, generalCacheReady, identity?.generalRoomId, identity?.persisted, mergeGeneralItems, persistGeneralCache, syncGeneral])
+    const result = await sendGeneralTargetedText(roomId, deviceId, text)
+    setPendingGeneralText(null)
+    setGeneralDestinationOpen(false)
+    setGeneralComposerResetKey((current) => current + 1)
+    flash(result.delivery === 'direct'
+      ? 'Texto enviado por Directo al dispositivo elegido'
+      : 'Texto enviado por Nube al dispositivo elegido')
+  }, [flash, identity?.generalRoomId, identity?.persisted, pendingGeneralText])
 
   const deleteGeneralText = useCallback(async (itemId: string) => {
     const roomId = identity?.generalRoomId
@@ -320,6 +334,18 @@ function App() {
     flash(synced ? 'Texto eliminado de General' : 'Texto eliminado; actualización pendiente')
   }, [flash, generalCacheReady, identity?.generalRoomId, identity?.persisted, persistGeneralCache, removeGeneralItem, syncGeneral])
 
+  const deleteGeneralVisibleText = useCallback(async (itemId: string) => {
+    const roomId = identity?.generalRoomId
+    if (!roomId || !identity.persisted) throw new Error('General todavía no está disponible en este dispositivo')
+    if (generalTargetedItems.some((entry) => entry.id === itemId)) {
+      await deleteGeneralTargetedInboxItem(roomId, itemId)
+      setGeneralTargetedItems((current) => current.filter((entry) => entry.id !== itemId))
+      flash('Eliminado de General en este dispositivo')
+      return
+    }
+    await deleteGeneralText(itemId)
+  }, [deleteGeneralText, flash, generalTargetedItems, identity?.generalRoomId, identity?.persisted])
+
   const preserveGeneralItem = useCallback(async (item: ClipboardItem, target: PreserveTarget) => {
     const roomId = identity?.generalRoomId
     if (!roomId || !identity.persisted) throw new Error('General todavía no está disponible en este dispositivo')
@@ -331,8 +357,19 @@ function App() {
       throw new Error('Mi nube se activará cuando Google Drive esté conectado realmente.')
     }
 
+    const targeted = generalTargetedItems.find((entry) => entry.id === item.id)
+    const targetedSnapshot: ClipboardTextSnapshot | undefined = targeted && identity?.personId ? {
+      sequence: 0,
+      id: targeted.id,
+      authorPersonId: identity.personId,
+      authorDeviceId: targeted.senderDeviceId,
+      text: targeted.text,
+      createdAt: targeted.createdAt,
+      expiresAt: targeted.expiresAt,
+    } : undefined
     const snapshot = generalItemsRef.current.find((entry) => entry.id === item.id)
       ?? localPreservedItems.find((entry) => entry.id === item.id)
+      ?? targetedSnapshot
     if (!snapshot) throw new Error('Este contenido ya no está disponible para conservar')
 
     await preserveTextOnThisDevice(roomId, snapshot)
@@ -342,7 +379,7 @@ function App() {
       return Array.from(next.values()).sort((a, b) => b.createdAt - a.createdAt || b.sequence - a.sequence)
     })
     flash('Conservado en este dispositivo')
-  }, [flash, identity?.generalRoomId, identity?.persisted, localPreservedItems])
+  }, [flash, generalTargetedItems, identity?.generalRoomId, identity?.persisted, identity?.personId, localPreservedItems])
 
   const releaseGeneralItem = useCallback(async (item: ClipboardItem) => {
     const roomId = identity?.generalRoomId
@@ -414,6 +451,39 @@ function App() {
     return subscribeLocalImageDirectReceipts(roomId, () => {
       flash('Imagen recibida por Directo local')
     })
+  }, [flash, identity?.generalRoomId, identity?.persisted])
+
+
+  useEffect(() => {
+    let cancelled = false
+    const roomId = identity?.generalRoomId
+    setGeneralTargetedItems([])
+    if (!roomId || !identity.persisted) return () => { cancelled = true }
+
+    const mergeTargeted = (items: GeneralTargetedInboxItem[]) => {
+      setGeneralTargetedItems((current) => {
+        const merged = new Map(current.map((item) => [item.id, item]))
+        for (const item of items) merged.set(item.id, item)
+        return Array.from(merged.values())
+          .filter((item) => item.expiresAt > Date.now())
+          .sort((a, b) => b.createdAt - a.createdAt || b.id.localeCompare(a.id))
+      })
+    }
+
+    void readGeneralTargetedInbox(roomId)
+      .then((items) => { if (!cancelled) mergeTargeted(items) })
+      .catch(() => undefined)
+    const unsubscribe = subscribeGeneralTargetedReceipts(roomId, ({ item, delivery }) => {
+      if (cancelled) return
+      mergeTargeted([item])
+      flash(delivery === 'direct'
+        ? 'Texto recibido en General por Directo'
+        : 'Texto recibido en General por Nube')
+    })
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
   }, [flash, identity?.generalRoomId, identity?.persisted])
 
   useEffect(() => {
@@ -488,6 +558,14 @@ function App() {
     else ensureClipboardRoomControlConnectivity(roomId)
     return () => suspendClipboardRoomConnectivity(roomId)
   }, [connectedSurfaceMode, identity?.generalRoomId, identity?.persisted])
+
+
+  useEffect(() => {
+    const roomId = identity?.generalRoomId
+    if (!roomId || !identity.persisted) return
+    ensureClipboardRoomForegroundReception(roomId)
+    return () => suspendClipboardRoomForegroundReception(roomId)
+  }, [identity?.generalRoomId, identity?.persisted])
 
   useEffect(() => {
     const roomId = identity?.generalRoomId
@@ -598,17 +676,37 @@ function App() {
       preserveTarget: 'device',
     })), [identity?.deviceId, localPreservedItems])
 
-  const recentGeneralCardItems = useMemo<ClipboardItem[]>(() => selectRecentGeneralTexts(
-    generalItems,
-    localPreservedIds,
-    Date.now(),
-  ).map((item) => ({
-    id: item.id,
-    type: 'text',
-    author: item.authorDeviceId === identity?.deviceId ? 'Este dispositivo' : 'Dispositivo vinculado',
-    text: item.text,
-    ownedByMe: true,
-  })), [generalItems, identity?.deviceId, localPreservedIds])
+  const recentGeneralCardItems = useMemo<ClipboardItem[]>(() => {
+    const now = Date.now()
+    const entries: Array<{ createdAt: number; card: ClipboardItem }> = selectRecentGeneralTexts(
+      generalItems,
+      localPreservedIds,
+      now,
+    ).map((item) => ({
+      createdAt: item.createdAt,
+      card: {
+        id: item.id,
+        type: 'text',
+        author: item.authorDeviceId === identity?.deviceId ? 'Este dispositivo' : 'Dispositivo vinculado',
+        text: item.text,
+        ownedByMe: true,
+      },
+    }))
+    for (const item of generalTargetedItems) {
+      if (item.expiresAt <= now || localPreservedIds.has(item.id)) continue
+      entries.push({
+        createdAt: item.createdAt,
+        card: {
+          id: item.id,
+          type: 'text',
+          author: 'Dispositivo vinculado',
+          text: item.text,
+          ownedByMe: true,
+        },
+      })
+    }
+    return entries.sort((a, b) => b.createdAt - a.createdAt).map((entry) => entry.card)
+  }, [generalItems, generalTargetedItems, identity?.deviceId, localPreservedIds])
 
   const syncLabel = isLocalView
     ? localClipboardReady ? 'Solo en este dispositivo' : 'Cargando local…'
@@ -735,9 +833,11 @@ function App() {
 
             {isGeneralView && (
               <ClipboardComposer
-                disabled={!canSyncRealGeneral}
+                disabled={!canUseRealGeneral}
                 cloudConnected={visibleCloudConnectivity === 'online'}
-                onSend={sendGeneralText}
+                routeText="Elige un dispositivo al enviar"
+                resetKey={generalComposerResetKey}
+                onSend={stageGeneralText}
               />
             )}
 
@@ -746,7 +846,7 @@ function App() {
                 <ClipboardCard
                   key={item.id}
                   item={item}
-                  onDelete={isLocalView ? deleteLocalText : isGeneralView ? deleteGeneralText : (id) => setMockItems((current) => current.filter((entry) => entry.id !== id))}
+                  onDelete={isLocalView ? deleteLocalText : isGeneralView ? deleteGeneralVisibleText : (id) => setMockItems((current) => current.filter((entry) => entry.id !== id))}
                   onShare={isLocalView ? openLocalShare : undefined}
                   onPreserve={isGeneralView ? preserveGeneralItem : undefined}
                   onReleasePreserve={isGeneralView ? releaseGeneralItem : undefined}
@@ -771,6 +871,16 @@ function App() {
       />
       <ConnectionsStoragePanel open={connectionsOpen} onClose={() => setConnectionsOpen(false)} />
       <ThemePicker open={appearanceOpen} value={themePreference} onChange={changeTheme} onClose={() => setAppearanceOpen(false)} />
+      <GeneralDestinationPanel
+        open={generalDestinationOpen}
+        identity={identity}
+        identityStatus={identityStatus}
+        onClose={() => {
+          setGeneralDestinationOpen(false)
+          setPendingGeneralText(null)
+        }}
+        onSelect={sendGeneralTextToDestination}
+      />
       <LocalClipboardSharePanel
         open={Boolean(localShareItemId)}
         item={localShareItem}
