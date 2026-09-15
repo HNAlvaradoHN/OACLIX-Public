@@ -36,6 +36,8 @@ class MainActivity : Activity() {
             settings.allowFileAccess = false
             settings.allowContentAccess = false
             settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+            settings.javaScriptCanOpenWindowsAutomatically = false
+            settings.setGeolocationEnabled(false)
             settings.setSupportMultipleWindows(false)
             addJavascriptInterface(OaclixWebBridge(applicationContext), NATIVE_BRIDGE_NAME)
             webViewClient = OaclixShellClient()
@@ -62,7 +64,11 @@ class MainActivity : Activity() {
     private inner class OaclixShellClient : WebViewClient() {
         override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
             val url = request?.url ?: return null
-            if (url.scheme != "https" || url.host != backendHost) return null
+            if (url.scheme == "http" || url.scheme == "https") {
+                if (url.scheme != "https" || url.host != backendHost) return blocked()
+            } else {
+                return null
+            }
 
             val path = url.path.orEmpty()
             if (path.startsWith(NATIVE_IMAGE_PREFIX)) return serveNativeImage(url)
@@ -82,7 +88,9 @@ class MainActivity : Activity() {
 
         override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
             val url = request?.url ?: return true
-            if (!request.isForMainFrame) return false
+            if (!request.isForMainFrame) {
+                return url.scheme != "https" || url.host != backendHost
+            }
             if (url.scheme == "https" && url.host == backendHost && url.path.orEmpty().startsWith(SHELL_PREFIX)) {
                 return false
             }
@@ -138,6 +146,15 @@ class MainActivity : Activity() {
         else -> false
     }
 
+    private fun blocked(): WebResourceResponse = WebResourceResponse(
+        "text/plain",
+        "UTF-8",
+        403,
+        "Forbidden",
+        mapOf("Cache-Control" to "no-store"),
+        ByteArrayInputStream("Forbidden".toByteArray(Charsets.UTF_8)),
+    )
+
     private fun notFound(): WebResourceResponse = WebResourceResponse(
         "text/plain",
         "UTF-8",
@@ -152,6 +169,6 @@ class MainActivity : Activity() {
         private const val SHELL_PREFIX = "/app/"
         private const val SHELL_INDEX_PATH = "/app/index.html"
         private const val NATIVE_IMAGE_PREFIX = "/app-native/image/"
-        private val NATIVE_IMAGE_ID = Regex("[0-9a-fA-F-]{36}")
+        private val NATIVE_IMAGE_ID = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
     }
 }
