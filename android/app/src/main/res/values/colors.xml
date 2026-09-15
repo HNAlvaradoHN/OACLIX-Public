@@ -1,15 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="oaclix_bg">#0A0A10</color>
-    <color name="oaclix_surface">#151521</color>
-    <color name="oaclix_surface_soft">#101018</color>
-    <color name="oaclix_surface_raised">#1B1B29</color>
-    <color name="oaclix_surface_stroke">#303047</color>
-    <color name="oaclix_text">#F6F5FF</color>
-    <color name="oaclix_muted">#AAA8BD</color>
-    <color name="oaclix_disabled">#666478</color>
-    <color name="oaclix_accent">#8B7CFF</color>
-    <color name="oaclix_accent_soft">#2B2756</color>
-    <color name="oaclix_accent_pressed">#A59BFF</color>
-    <color name="oaclix_danger">#FF8A9A</color>
+    <!-- Android mirrors the PWA dark design tokens in src/styles/theme.css. -->
+    <color name="oaclix_bg">#080A0E</color>
+    <color name="oaclix_surface">#11161E</color>
+    <color name="oaclix_surface_soft">#1A212C</color>
+    <color name="oaclix_surface_raised">#151B24</color>
+    <color name="oaclix_surface_stroke">#35404E</color>
+    <color name="oaclix_text">#F8FBFF</color>
+    <color name="oaclix_muted">#B1BAC7</color>
+    <color name="oaclix_disabled">#818B9A</color>
+    <color name="oaclix_accent">#8E72FF</color>
+    <color name="oaclix_accent_soft">#292440</color>
+    <color name="oaclix_accent_pressed">#A58FFF</color>
+    <color name="oaclix_cyan">#50D2FF</color>
+    <color name="oaclix_emerald">#55EDB7</color>
+    <color name="oaclix_danger">#FF7482</color>
 </resources>
