@@ -1,13 +1,19 @@
 package app.oaclix.android
 
+import android.content.Context
 import android.webkit.JavascriptInterface
 import app.oaclix.android.identity.AndroidKeystoreDeviceIdentity
+import app.oaclix.android.imageclipboard.ImageClipboardStore
+import org.json.JSONArray
 import org.json.JSONObject
 import org.json.JSONTokener
 
 internal class OaclixWebBridge(
+    context: Context,
     private val identity: AndroidKeystoreDeviceIdentity = AndroidKeystoreDeviceIdentity(),
 ) {
+    private val imageStore = ImageClipboardStore(context.applicationContext)
+
     @JavascriptInterface
     fun getDeviceId(): String = identity.getOrCreateSnapshot().deviceId
 
@@ -49,5 +55,26 @@ internal class OaclixWebBridge(
             .put("nonce", proof.nonce)
             .put("signature", proof.signature)
             .toString()
+    }
+
+    @JavascriptInterface
+    fun listLocalImages(): String = JSONArray().apply {
+        imageStore.list().forEach { item ->
+            put(
+                JSONObject()
+                    .put("id", item.id)
+                    .put("mimeType", item.mimeType)
+                    .put("byteSize", item.byteSize)
+                    .put("createdAt", item.createdAt)
+                    .put("expiresAt", item.expiresAt),
+            )
+        }
+    }.toString()
+
+    @JavascriptInterface
+    fun deleteLocalImage(id: String): Boolean {
+        val item = imageStore.list().firstOrNull { it.id == id } ?: return false
+        imageStore.delete(item)
+        return true
     }
 }
