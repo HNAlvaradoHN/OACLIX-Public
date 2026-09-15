@@ -101,9 +101,12 @@ test('relay code stores before acknowledging and never advertises this route as 
   assert.doesNotMatch(shareReceiver, /Imagen enviada por Directo/)
 })
 
-test('Android image reception is foreground-scoped and separated from the UI thread', async () => {
-  const [controller, mainActivity] = await Promise.all([
+test('Android image reception is foreground-scoped at application level and separated from the UI thread', async () => {
+  const [controller, application, gate, manifest, mainActivity] = await Promise.all([
     read('android/app/src/main/java/app/oaclix/android/share/NativeImageRelayForegroundController.kt'),
+    read('android/app/src/main/java/app/oaclix/android/OaclixApplication.kt'),
+    read('android/app/src/main/java/app/oaclix/android/share/NativeForegroundReceiverGate.kt'),
+    read('android/app/src/main/AndroidManifest.xml'),
     read('android/app/src/main/java/app/oaclix/android/MainActivity.kt'),
   ])
 
@@ -111,8 +114,17 @@ test('Android image reception is foreground-scoped and separated from the UI thr
   assert.match(controller, /NativeImageDeviceRelayReceiver/)
   assert.match(controller, /executor\.execute/)
   assert.match(controller, /receiver\?\.stop\(\)/)
-  assert.match(mainActivity, /override fun onStart\(\)[\s\S]*imageRelayController\.start\(\)/)
-  assert.match(mainActivity, /override fun onStop\(\)[\s\S]*imageRelayController\.stop\(\)/)
+  assert.match(manifest, /android:name="\.OaclixApplication"/)
+  assert.match(application, /Application\.ActivityLifecycleCallbacks/)
+  assert.match(application, /onFirstSurfaceStarted = imageRelayController::start/)
+  assert.match(application, /onLastSurfaceStopped = imageRelayController::stop/)
+  assert.match(application, /override fun onActivityStarted[\s\S]*receiverGate\.surfaceStarted\(\)/)
+  assert.match(application, /override fun onActivityStopped[\s\S]*receiverGate\.surfaceStopped\(\)/)
+  assert.match(gate, /startedSurfaces/)
+  assert.match(gate, /if \(startedSurfaces != 0 \|\| !active\) return/)
+  assert.doesNotMatch(mainActivity, /imageRelayController\.start\(\)/)
+  assert.doesNotMatch(mainActivity, /imageRelayController\.stop\(\)/)
+  assert.match(mainActivity, /NativeImageReceiptBus/)
   assert.match(mainActivity, /R\.string\.image_received_cloud/)
 })
 

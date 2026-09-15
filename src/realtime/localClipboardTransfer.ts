@@ -5,6 +5,8 @@ export type LocalClipboardTransferItem = {
   expiresAt: number
 }
 
+export type ClipboardTransferSurface = 'local' | 'general'
+
 export type LocalClipboardTransfer = {
   version: 1
   type: 'local-clipboard-transfer'
@@ -12,6 +14,8 @@ export type LocalClipboardTransfer = {
   senderDeviceId: string
   receiverDeviceId: string
   item: LocalClipboardTransferItem
+  /** Ausente equivale a Mi portapapeles para compatibilidad con v1. */
+  surface?: ClipboardTransferSurface
 }
 
 export type LocalClipboardTransferAck = {
@@ -63,11 +67,12 @@ function validTransferItem(value: unknown): value is LocalClipboardTransferItem 
     && Number(item.expiresAt) - Number(item.createdAt) <= MAX_RETENTION_MS
 }
 
-export function createLocalClipboardTransfer(
+function createTransfer(
   item: LocalClipboardTransferItem,
   senderDeviceId: string,
   receiverDeviceId: string,
-  transferId = randomTransferId(),
+  transferId: string,
+  surface?: ClipboardTransferSurface,
 ): LocalClipboardTransfer {
   const transfer: LocalClipboardTransfer = {
     version: 1,
@@ -81,10 +86,32 @@ export function createLocalClipboardTransfer(
       createdAt: item.createdAt,
       expiresAt: item.expiresAt,
     },
+    ...(surface && surface !== 'local' ? { surface } : {}),
   }
   if (!validLocalClipboardTransfer(transfer)) throw new Error('Transferencia local inválida')
-  if (senderDeviceId === receiverDeviceId) throw new Error('El destino debe ser otro dispositivo')
   return transfer
+}
+
+export function createLocalClipboardTransfer(
+  item: LocalClipboardTransferItem,
+  senderDeviceId: string,
+  receiverDeviceId: string,
+  transferId = randomTransferId(),
+): LocalClipboardTransfer {
+  return createTransfer(item, senderDeviceId, receiverDeviceId, transferId)
+}
+
+export function createGeneralClipboardTransfer(
+  item: LocalClipboardTransferItem,
+  senderDeviceId: string,
+  receiverDeviceId: string,
+  transferId = randomTransferId(),
+): LocalClipboardTransfer {
+  return createTransfer(item, senderDeviceId, receiverDeviceId, transferId, 'general')
+}
+
+export function clipboardTransferSurface(transfer: LocalClipboardTransfer): ClipboardTransferSurface {
+  return transfer.surface ?? 'local'
 }
 
 export function createLocalClipboardTransferAck(
@@ -114,6 +141,7 @@ export function validLocalClipboardTransfer(value: unknown): value is LocalClipb
     && typeof transfer.receiverDeviceId === 'string'
     && DEVICE_ID_PATTERN.test(transfer.receiverDeviceId)
     && transfer.senderDeviceId !== transfer.receiverDeviceId
+    && (transfer.surface === undefined || transfer.surface === 'local' || transfer.surface === 'general')
     && validTransferItem(transfer.item)
 }
 
