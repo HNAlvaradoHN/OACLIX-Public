@@ -29,11 +29,19 @@ export function LocalImageClipboardShelf({ onShare }: LocalImageClipboardShelfPr
         if (active) setImages(items)
       }).catch(() => undefined)
     }
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') refresh()
+    }
+
     refresh()
     const unsubscribe = subscribeAllLocalImageReceipts(refresh)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+    window.addEventListener('focus', refresh)
     return () => {
       active = false
       unsubscribe()
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+      window.removeEventListener('focus', refresh)
     }
   }, [])
 

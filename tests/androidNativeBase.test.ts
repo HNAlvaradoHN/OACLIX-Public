@@ -2,20 +2,26 @@ import assert from 'node:assert/strict'
 import { readFile, stat } from 'node:fs/promises'
 import test from 'node:test'
 
+const projectRoot = new URL('../', import.meta.url)
 const androidRoot = new URL('../android/', import.meta.url)
+
+async function readProject(path: string) {
+  return readFile(new URL(path, projectRoot), 'utf8')
+}
 
 async function readAndroid(path: string) {
   return readFile(new URL(path, androidRoot), 'utf8')
 }
 
-test('la base Android usa un SDK estable actual y limita red al bloque de identidad', async () => {
-  const [rootBuild, appBuild, manifest, identityApi, localActivity, shareReceiver] = await Promise.all([
+test('la base Android usa un SDK estable actual y mantiene red nativa acotada', async () => {
+  const [rootBuild, appBuild, manifest, identityApi, mainActivity, shareReceiver, directReceiver] = await Promise.all([
     readAndroid('build.gradle.kts'),
     readAndroid('app/build.gradle.kts'),
     readAndroid('app/src/main/AndroidManifest.xml'),
     readAndroid('app/src/main/java/app/oaclix/android/identity/NativeIdentityApi.kt'),
     readAndroid('app/src/main/java/app/oaclix/android/MainActivity.kt'),
     readAndroid('app/src/main/java/app/oaclix/android/ShareReceiverActivity.kt'),
+    readAndroid('app/src/main/java/app/oaclix/android/share/NativeImageDeviceRelayReceiver.kt'),
   ])
   assert.match(rootBuild, /com\.android\.application"\) version "9\.1\.1"/)
   assert.match(appBuild, /compileSdk = 36/)
@@ -28,11 +34,62 @@ test('la base Android usa un SDK estable actual y limita red al bloque de identi
   assert.match(appBuild, /orElse\("https:\/\/oaclix\.invalid"\)/)
   assert.match(manifest, /android:allowBackup="false"/)
   assert.match(manifest, /android\.permission\.INTERNET/)
+  assert.match(manifest, /android\.permission\.ACCESS_NETWORK_STATE/)
+  assert.match(manifest, /android\.permission\.CHANGE_NETWORK_STATE/)
+  assert.match(manifest, /android\.permission\.MODIFY_AUDIO_SETTINGS/)
   assert.match(manifest, /android:usesCleartextTraffic="false"/)
   assert.match(identityApi, /\/api\/identity\/bootstrap/)
   assert.match(identityApi, /startsWith\("https:\/\/"\)/)
-  assert.doesNotMatch(localActivity, /NativeIdentityApi|HttpURLConnection|java\.net\./)
+  assert.doesNotMatch(mainActivity, /HttpURLConnection|java\.net\./)
   assert.doesNotMatch(shareReceiver, /NativeIdentityApi|HttpURLConnection|java\.net\./)
+  assert.match(directReceiver, /Looper\.getMainLooper\(\)/)
+  assert.match(directReceiver, /Handler\(Looper\.getMainLooper\(\)\)\.post/)
+})
+
+test('Android usa la PWA empaquetada como superficie principal y no duplica su interfaz', async () => {
+  const [activity, bridge, appBuild, packageJson, viteConfig, workflow, identity, imageStore] = await Promise.all([
+    readAndroid('app/src/main/java/app/oaclix/android/MainActivity.kt'),
+    readAndroid('app/src/main/java/app/oaclix/android/OaclixWebBridge.kt'),
+    readAndroid('app/build.gradle.kts'),
+    readProject('package.json'),
+    readProject('vite.config.ts'),
+    readProject('.github/workflows/verify.yml'),
+    readProject('src/identity/deviceIdentity.ts'),
+    readProject('src/data/localImageClipboard.ts'),
+  ])
+
+  assert.match(activity, /WebView\(this\)/)
+  assert.match(activity, /addJavascriptInterface\(OaclixWebBridge\(applicationContext\), NATIVE_BRIDGE_NAME\)/)
+  assert.match(activity, /MIXED_CONTENT_NEVER_ALLOW/)
+  assert.match(activity, /allowFileAccess = false/)
+  assert.match(activity, /allowContentAccess = false/)
+  assert.match(activity, /blockNetworkLoads = true/)
+  assert.match(activity, /SHELL_PREFIX = "\/app\/"/)
+  assert.match(activity, /assets\.open\(relativePath\)/)
+  assert.match(activity, /url\.host != backendHost/)
+  assert.match(activity, /NATIVE_IMAGE_PREFIX = "\/app-native\/image\/"/)
+  assert.match(activity, /imageStore\.openInputStream\(item\)/)
+  assert.match(activity, /"Cache-Control" to "no-store"/)
+  assert.match(bridge, /AndroidKeystoreDeviceIdentity/)
+  assert.match(bridge, /ImageClipboardStore/)
+  assert.match(bridge, /@JavascriptInterface[\s\S]*?getDeviceId/)
+  assert.match(bridge, /@JavascriptInterface[\s\S]*?createBootstrapProof/)
+  assert.match(bridge, /@JavascriptInterface[\s\S]*?signAction/)
+  assert.match(bridge, /@JavascriptInterface[\s\S]*?listLocalImages/)
+  assert.match(bridge, /@JavascriptInterface[\s\S]*?deleteLocalImage/)
+  assert.match(appBuild, /assets\.srcDir\(webBundleDir\)/)
+  assert.match(appBuild, /verifyWebBundle/)
+  assert.match(packageJson, /"build:android-web": "tsc -b && vite build --mode android"/)
+  assert.match(viteConfig, /mode === 'android'/)
+  assert.match(viteConfig, /base: androidShell \? '\/app\/' : '\/'/)
+  assert.match(viteConfig, /outDir: 'dist-android'/)
+  assert.match(workflow, /npm run build:android-web/)
+  assert.match(identity, /window\.OaclixNative/)
+  assert.match(identity, /bridge\.signAction\(action, JSON\.stringify\(payload\)\)/)
+  assert.match(identity, /bridge\.createBootstrapProof\(\)/)
+  assert.match(imageStore, /bridge\.listLocalImages\(\)/)
+  assert.match(imageStore, /fetch\(`\/app-native\/image\/\$\{encodeURIComponent\(item\.id\)\}`/)
+  assert.match(imageStore, /bridge\.deleteLocalImage\(item\.id\)/)
 })
 
 test('el Gradle Wrapper Android queda fijado y verificable', async () => {
@@ -71,33 +128,13 @@ test('Mi portapapeles conserva 8.000 inline y usa .txt privado para texto largo'
   assert.match(fileStore, /CodingErrorAction\.REPORT/)
 })
 
-test('copiar y pegar son acciones visibles y un pegado largo nunca se recorta silenciosamente', async () => {
-  const [activity, bridge, layout] = await Promise.all([
-    readAndroid('app/src/main/java/app/oaclix/android/MainActivity.kt'),
-    readAndroid('app/src/main/java/app/oaclix/android/OaclixClipboardBridge.kt'),
-    readAndroid('app/src/main/res/layout/activity_main.xml'),
-  ])
-  assert.match(activity, /ClipboardManager/)
-  assert.match(activity, /paste_button\)\.setOnClickListener/)
-  assert.match(activity, /copy\.setOnClickListener/)
-  assert.match(activity, /history\.read\(item\)/)
-  assert.match(activity, /input\.setText\(text\)/)
-  assert.match(activity, /OaclixClipboardBridge\.copy\(this, text\)/)
+test('el puente de portapapeles nativo conserva privacidad y no recorta texto', async () => {
+  const bridge = await readAndroid('app/src/main/java/app/oaclix/android/OaclixClipboardBridge.kt')
   assert.match(bridge, /ClipData\.newPlainText\(context\.getString\(R\.string\.clip_label\), text\)/)
   assert.match(bridge, /clipboard\.setPrimaryClip\(clip\)/)
-  assert.doesNotMatch(activity, /take\(8_000\)/)
-  assert.doesNotMatch(bridge, /take\(|substring\(|ClipData\.newUri|writeText\(/)
-  assert.doesNotMatch(layout, /android:maxLength="8000"/)
-})
-
-test('copiar protege la vista previa del sistema y evita confirmaciones duplicadas modernas', async () => {
-  const [activity, bridge] = await Promise.all([
-    readAndroid('app/src/main/java/app/oaclix/android/MainActivity.kt'),
-    readAndroid('app/src/main/java/app/oaclix/android/OaclixClipboardBridge.kt'),
-  ])
   assert.match(bridge, /ClipDescription\.EXTRA_IS_SENSITIVE/)
   assert.match(bridge, /Build\.VERSION\.SDK_INT >= Build\.VERSION_CODES\.TIRAMISU/)
-  assert.match(activity, /Build\.VERSION\.SDK_INT <= Build\.VERSION_CODES\.S_V2/)
+  assert.doesNotMatch(bridge, /take\(|substring\(|ClipData\.newUri|writeText\(/)
 })
 
 test('Android excluye datos privados completos de backup y transferencia', async () => {

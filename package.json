@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:android-web": "tsc -b && vite build --mode android",
     "lint": "oxlint src",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "audit:public": "node scripts/audit-public-snapshot.mjs .",

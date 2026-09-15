@@ -1,322 +1,174 @@
 package app.oaclix.android
 
 import android.app.Activity
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
 import android.content.Intent
-import android.os.Build
+import android.graphics.Color
+import android.net.Uri
 import android.os.Bundle
-import android.view.View
-import android.widget.Button
-import android.widget.EditText
-import android.widget.ImageView
-import android.widget.LinearLayout
-import android.widget.TextView
-import android.widget.Toast
-import app.oaclix.android.imageclipboard.ImageClipboardItem
+import android.webkit.ServiceWorkerController
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import app.oaclix.android.identity.NativeIdentityApi
 import app.oaclix.android.imageclipboard.ImageClipboardStore
-import app.oaclix.android.imageclipboard.ImageThumbnailDecoder
-import app.oaclix.android.localclipboard.LocalClipboardEntry
-import app.oaclix.android.localclipboard.LocalClipboardHistory
-import app.oaclix.android.share.NativeImageReceiptBus
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
-import kotlin.math.ceil
+import java.io.ByteArrayInputStream
 
 class MainActivity : Activity() {
-    private lateinit var history: LocalClipboardHistory
+    private lateinit var webView: WebView
+    private lateinit var backendHost: String
     private lateinit var imageStore: ImageClipboardStore
-    private lateinit var input: EditText
-    private lateinit var emptyState: TextView
-    private lateinit var itemsContainer: LinearLayout
-    private lateinit var ioExecutor: ExecutorService
-    private var imageReceiptSubscription: AutoCloseable? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
 
-        history = LocalClipboardHistory(this)
-        imageStore = ImageClipboardStore(this)
-        ioExecutor = Executors.newSingleThreadExecutor()
-        input = findViewById(R.id.local_text_input)
-        emptyState = findViewById(R.id.empty_state)
-        itemsContainer = findViewById(R.id.items_container)
+        val backendBaseUrl = NativeIdentityApi.normalizeBaseUrl(getString(R.string.oaclix_api_base_url))
+        backendHost = requireNotNull(Uri.parse(backendBaseUrl).host) { "Endpoint OACLIX inválido" }
+        imageStore = ImageClipboardStore(applicationContext)
 
-        findViewById<Button>(R.id.link_device_open_button).setOnClickListener {
-            startActivity(Intent(this, LinkDeviceActivity::class.java))
+        ServiceWorkerController.getInstance().serviceWorkerWebSettings.blockNetworkLoads = true
+
+        webView = WebView(this).apply {
+            setBackgroundColor(Color.rgb(6, 11, 18))
+            settings.javaScriptEnabled = true
+            settings.domStorageEnabled = true
+            settings.allowFileAccess = false
+            settings.allowContentAccess = false
+            settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+            settings.javaScriptCanOpenWindowsAutomatically = false
+            settings.setGeolocationEnabled(false)
+            settings.setSupportMultipleWindows(false)
+            addJavascriptInterface(OaclixWebBridge(applicationContext), NATIVE_BRIDGE_NAME)
+            webViewClient = OaclixShellClient()
         }
-        findViewById<Button>(R.id.paste_button).setOnClickListener { pasteFromSystemClipboard() }
-        findViewById<Button>(R.id.save_button).setOnClickListener { saveCurrentText() }
-    }
 
-    override fun onStart() {
-        super.onStart()
-        imageReceiptSubscription?.close()
-        imageReceiptSubscription = NativeImageReceiptBus.subscribe {
-            runOnUiThread {
-                if (isDestroyed || isFinishing) return@runOnUiThread
-                toast(getString(R.string.image_received_cloud))
-                loadItems()
-            }
-        }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        if (::history.isInitialized && ::imageStore.isInitialized) loadItems()
-    }
-
-    override fun onStop() {
-        imageReceiptSubscription?.close()
-        imageReceiptSubscription = null
-        super.onStop()
+        setContentView(webView)
+        webView.loadUrl("$backendBaseUrl$SHELL_INDEX_PATH")
     }
 
     override fun onDestroy() {
-        imageReceiptSubscription?.close()
-        imageReceiptSubscription = null
-        if (::ioExecutor.isInitialized) ioExecutor.shutdown()
+        if (::webView.isInitialized) {
+            webView.removeJavascriptInterface(NATIVE_BRIDGE_NAME)
+            webView.stopLoading()
+            webView.destroy()
+        }
         super.onDestroy()
     }
 
-    private fun saveCurrentText() {
-        val text = input.text.toString()
-        runStorage(
-            task = { history.save(text) },
-            onSuccess = {
-                input.text.clear()
-                toast(getString(R.string.saved_local))
-                loadItems()
-            },
-        )
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        if (::webView.isInitialized && webView.canGoBack()) webView.goBack() else super.onBackPressed()
     }
 
-    private fun loadItems() {
-        runStorage(
-            task = {
-                buildList<ClipboardDisplayItem> {
-                    history.list().forEach { add(ClipboardDisplayItem.Text(it)) }
-                    imageStore.list().forEach { add(ClipboardDisplayItem.Image(it)) }
-                }.sortedByDescending { it.createdAt }
-            },
-            onSuccess = ::renderItems,
-        )
-    }
-
-    private fun renderItems(items: List<ClipboardDisplayItem>) {
-        itemsContainer.removeAllViews()
-        emptyState.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
-
-        for (displayItem in items) {
-            val row = layoutInflater.inflate(R.layout.item_local_clipboard, itemsContainer, false)
-            val imagePreview = row.findViewById<ImageView>(R.id.item_image_preview)
-            val preview = row.findViewById<TextView>(R.id.item_preview)
-            val expiry = row.findViewById<TextView>(R.id.item_expiry)
-            val copy = row.findViewById<Button>(R.id.copy_button)
-            val delete = row.findViewById<Button>(R.id.delete_button)
-
-            when (displayItem) {
-                is ClipboardDisplayItem.Text -> {
-                    imagePreview.visibility = View.GONE
-                    preview.text = when (val item = displayItem.item) {
-                        is LocalClipboardEntry.Inline -> item.item.text
-                        is LocalClipboardEntry.TextFile -> getString(
-                            R.string.large_text_item_preview,
-                            item.item.preview,
-                            formatKilobytes(item.item.byteSize),
-                        )
-                    }
-                    copy.setOnClickListener { copyTextItem(displayItem.item) }
-                    delete.setOnClickListener { deleteTextItem(displayItem.item) }
-                }
-
-                is ClipboardDisplayItem.Image -> {
-                    imagePreview.visibility = View.VISIBLE
-                    imagePreview.setImageResource(android.R.drawable.ic_menu_gallery)
-                    preview.text = getString(
-                        R.string.image_item_preview,
-                        imageFormatLabel(displayItem.item.mimeType),
-                        formatImageSize(displayItem.item.byteSize),
-                    )
-                    bindImageThumbnail(imagePreview, displayItem.item)
-                    copy.setOnClickListener { copyImageItem(displayItem.item) }
-                    delete.setOnClickListener { deleteImageItem(displayItem.item) }
-                }
-            }
-
-            expiry.text = remainingLabel(displayItem.expiresAt)
-            itemsContainer.addView(row)
-        }
-    }
-
-    private fun bindImageThumbnail(imageView: ImageView, item: ImageClipboardItem) {
-        if (!::ioExecutor.isInitialized || ioExecutor.isShutdown) return
-        ioExecutor.execute {
-            val bitmap = runCatching {
-                ImageThumbnailDecoder.decode(
-                    store = imageStore,
-                    item = item,
-                    targetPixels = dp(LOCAL_IMAGE_THUMBNAIL_DECODE_DP),
-                )
-            }.getOrNull()
-
-            runOnUiThread {
-                if (isDestroyed || isFinishing || bitmap == null) return@runOnUiThread
-                imageView.setImageBitmap(bitmap)
-            }
-        }
-    }
-
-    private fun copyTextItem(item: LocalClipboardEntry) {
-        runStorage(
-            task = { history.read(item) },
-            onSuccess = ::copyTextToSystemClipboard,
-        )
-    }
-
-    private fun deleteTextItem(item: LocalClipboardEntry) {
-        runStorage(
-            task = { history.delete(item) },
-            onSuccess = {
-                toast(getString(R.string.deleted_local))
-                loadItems()
-            },
-        )
-    }
-
-    private fun copyImageItem(item: ImageClipboardItem) {
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val uri = imageStore.contentUri(item)
-        val clip = ClipData.newUri(contentResolver, getString(R.string.image_clip_label), uri)
-        clipboard.setPrimaryClip(clip)
-        toast(getString(R.string.image_copied))
-    }
-
-    private fun deleteImageItem(item: ImageClipboardItem) {
-        runStorage(
-            task = { imageStore.delete(item) },
-            onSuccess = {
-                toast(getString(R.string.deleted_local))
-                loadItems()
-            },
-        )
-    }
-
-    private fun copyTextToSystemClipboard(text: String) {
-        OaclixClipboardBridge.copy(this, text)
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) toast(getString(R.string.copied))
-    }
-
-    private fun pasteFromSystemClipboard() {
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = clipboard.primaryClip
-        if (clip == null || clip.itemCount == 0) {
-            toast(getString(R.string.nothing_to_paste))
-            return
-        }
-
-        val item = clip.getItemAt(0)
-        val uri = item.uri
-        val mimeType = uri?.let { runCatching { contentResolver.getType(it) }.getOrNull() }
-        if (uri != null && mimeType?.startsWith("image/") == true) {
-            importImage(uri)
-            return
-        }
-
-        val text = item.coerceToText(this)?.toString().orEmpty()
-        if (text.isBlank()) {
-            toast(getString(R.string.nothing_to_paste))
-            return
-        }
-
-        input.setText(text)
-        input.setSelection(input.text.length)
-    }
-
-    private fun importImage(uri: android.net.Uri) {
-        runStorage(
-            task = { imageStore.createFromUri(uri) },
-            onSuccess = {
-                toast(getString(R.string.image_saved_local))
-                loadItems()
-            },
-        )
-    }
-
-    private fun remainingLabel(expiresAt: Long): String {
-        val remainingMinutes = ceil((expiresAt - System.currentTimeMillis()).coerceAtLeast(0L) / 60_000.0).toLong()
-        if (remainingMinutes >= 60L) {
-            val hours = remainingMinutes / 60L
-            val minutes = remainingMinutes % 60L
-            return if (minutes == 0L) {
-                resources.getQuantityString(R.plurals.expires_hours, hours.toInt(), hours)
+    private inner class OaclixShellClient : WebViewClient() {
+        override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
+            val url = request?.url ?: return null
+            if (url.scheme == "http" || url.scheme == "https") {
+                if (url.scheme != "https" || url.host != backendHost) return blocked()
             } else {
-                getString(R.string.expires_hours_minutes, hours, minutes)
+                return null
             }
+
+            val path = url.path.orEmpty()
+            if (path.startsWith(NATIVE_IMAGE_PREFIX)) return serveNativeImage(url)
+            if (!path.startsWith(SHELL_PREFIX)) return null
+
+            val relativePath = path.removePrefix(SHELL_PREFIX).ifBlank { "index.html" }
+            if (!isSafeAssetPath(relativePath)) return notFound()
+
+            return runCatching {
+                WebResourceResponse(
+                    mimeType(relativePath),
+                    if (isTextAsset(relativePath)) "UTF-8" else null,
+                    assets.open(relativePath),
+                )
+            }.getOrElse { notFound() }
         }
-        return resources.getQuantityString(
-            R.plurals.expires_minutes,
-            remainingMinutes.toInt(),
-            remainingMinutes,
-        )
-    }
 
-    private fun imageFormatLabel(mimeType: String): String = when (mimeType) {
-        "image/png" -> "PNG"
-        "image/jpeg" -> "JPG"
-        "image/webp" -> "WEBP"
-        "image/gif" -> "GIF"
-        else -> "IMG"
-    }
-
-    private fun formatKilobytes(bytes: Long): String = "${(bytes + 1023L) / 1024L} KB"
-
-    private fun formatImageSize(bytes: Long): String = if (bytes >= 1024L * 1024L) {
-        String.format(java.util.Locale.US, "%.1f MB", bytes / (1024.0 * 1024.0))
-    } else {
-        formatKilobytes(bytes)
-    }
-
-    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
-
-    private fun toast(message: String) {
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
-    }
-
-    private fun <T> runStorage(task: () -> T, onSuccess: (T) -> Unit) {
-        if (ioExecutor.isShutdown) return
-        ioExecutor.execute {
-            try {
-                val result = task()
-                runOnUiThread {
-                    if (!isDestroyed) onSuccess(result)
-                }
-            } catch (error: Exception) {
-                runOnUiThread {
-                    if (!isDestroyed) toast(error.message ?: getString(R.string.local_error))
-                }
+        override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+            val url = request?.url ?: return true
+            if (!request.isForMainFrame) {
+                return url.scheme != "https" || url.host != backendHost
             }
+            if (url.scheme == "https" && url.host == backendHost && url.path.orEmpty().startsWith(SHELL_PREFIX)) {
+                return false
+            }
+
+            if (url.scheme == "https") {
+                runCatching { startActivity(Intent(Intent.ACTION_VIEW, url)) }
+            }
+            return true
         }
     }
 
-    private sealed class ClipboardDisplayItem {
-        abstract val createdAt: Long
-        abstract val expiresAt: Long
-
-        data class Text(val item: LocalClipboardEntry) : ClipboardDisplayItem() {
-            override val createdAt: Long get() = item.createdAt
-            override val expiresAt: Long get() = item.expiresAt
-        }
-
-        data class Image(val item: ImageClipboardItem) : ClipboardDisplayItem() {
-            override val createdAt: Long get() = item.createdAt
-            override val expiresAt: Long get() = item.expiresAt
-        }
+    private fun serveNativeImage(url: Uri): WebResourceResponse {
+        val id = url.lastPathSegment.orEmpty()
+        if (!NATIVE_IMAGE_ID.matches(id)) return notFound()
+        val item = imageStore.list().firstOrNull { it.id == id } ?: return notFound()
+        return runCatching {
+            WebResourceResponse(
+                item.mimeType,
+                null,
+                200,
+                "OK",
+                mapOf(
+                    "Cache-Control" to "no-store",
+                    "Content-Length" to item.byteSize.toString(),
+                ),
+                imageStore.openInputStream(item),
+            )
+        }.getOrElse { notFound() }
     }
+
+    private fun isSafeAssetPath(path: String): Boolean {
+        if (path.isBlank() || path.startsWith('/') || path.contains('\\')) return false
+        return path.split('/').none { segment -> segment.isBlank() || segment == "." || segment == ".." }
+    }
+
+    private fun mimeType(path: String): String = when (path.substringAfterLast('.', "").lowercase()) {
+        "html" -> "text/html"
+        "js", "mjs" -> "text/javascript"
+        "css" -> "text/css"
+        "json", "webmanifest" -> "application/json"
+        "svg" -> "image/svg+xml"
+        "png" -> "image/png"
+        "jpg", "jpeg" -> "image/jpeg"
+        "webp" -> "image/webp"
+        "gif" -> "image/gif"
+        "woff" -> "font/woff"
+        "woff2" -> "font/woff2"
+        else -> "application/octet-stream"
+    }
+
+    private fun isTextAsset(path: String): Boolean = when (path.substringAfterLast('.', "").lowercase()) {
+        "html", "js", "mjs", "css", "json", "webmanifest", "svg" -> true
+        else -> false
+    }
+
+    private fun blocked(): WebResourceResponse = WebResourceResponse(
+        "text/plain",
+        "UTF-8",
+        403,
+        "Forbidden",
+        mapOf("Cache-Control" to "no-store"),
+        ByteArrayInputStream("Forbidden".toByteArray(Charsets.UTF_8)),
+    )
+
+    private fun notFound(): WebResourceResponse = WebResourceResponse(
+        "text/plain",
+        "UTF-8",
+        404,
+        "Not Found",
+        mapOf("Cache-Control" to "no-store"),
+        ByteArrayInputStream("Not Found".toByteArray(Charsets.UTF_8)),
+    )
 
     companion object {
-        private const val LOCAL_IMAGE_THUMBNAIL_DECODE_DP = 112
+        private const val NATIVE_BRIDGE_NAME = "OaclixNative"
+        private const val SHELL_PREFIX = "/app/"
+        private const val SHELL_INDEX_PATH = "/app/index.html"
+        private const val NATIVE_IMAGE_PREFIX = "/app-native/image/"
+        private val NATIVE_IMAGE_ID = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
     }
 }

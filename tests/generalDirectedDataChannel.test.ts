@@ -14,7 +14,7 @@ test('LanPeerManager can send a clipboard change to exactly one validated peer',
   assert.match(manager, /sendClipboardChangeToPeer\(remoteDeviceId: string, change: LanClipboardChange\)/)
   assert.match(manager, /if \(!validLanClipboardChange\(change\)\) return false/)
   assert.match(manager, /const peer = this\.peers\.get\(remoteDeviceId\)/)
-  assert.match(manager, /if \(!peer\?\.validated \|\| peer\.channel\?\.readyState !== 'open'\) return false/)
+  assert.match(manager, /sendClipboardChangeToPeer[\s\S]*?!peer\?\.validated[\s\S]*?!peer\.capabilities\.has\('room-core'\)[\s\S]*?return false/)
   assert.match(manager, /peer\.channel\.send\(JSON\.stringify\(\{ type: 'clipboard-change', change \} satisfies DirectMessage\)\)/)
 })
 

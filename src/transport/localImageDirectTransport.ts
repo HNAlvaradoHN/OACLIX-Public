@@ -61,7 +61,7 @@ export async function sendLocalImageDirect(
 
   const localDeviceId = await requireAuthorizedDirectDevice(roomId, remoteDeviceId)
   const sender = getLocalImageDirectSender(roomId)
-  if (!sender || !sender.getValidatedPeerIds().includes(remoteDeviceId)) {
+  if (!sender || !sender.getImageDirectPeerIds().includes(remoteDeviceId)) {
     throw new Error('Ese dispositivo no está disponible por Directo local')
   }
 

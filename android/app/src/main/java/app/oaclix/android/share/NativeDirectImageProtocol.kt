@@ -63,7 +63,7 @@ object NativeDirectImageProtocol {
             || !validItem(item)
         ) return null
 
-        val expectedChunkCount = ((item.byteSize + CHUNK_BYTES - 1L) / CHUNK_BYTES).toInt()
+        val expectedChunkCount = expectedChunkCount(item.byteSize) ?: return null
         if (chunkCount != expectedChunkCount) return null
 
         return Start(transferId, senderDeviceId, receiverDeviceId, chunkSize, chunkCount, item)
@@ -102,6 +102,12 @@ object NativeDirectImageProtocol {
         if (chunkIndex < 0 || chunkIndex >= start.chunkCount) return 0
         if (chunkIndex < start.chunkCount - 1) return start.chunkSize
         return (start.item.byteSize - start.chunkSize.toLong() * (start.chunkCount - 1)).toInt()
+    }
+
+    private fun expectedChunkCount(byteSize: Long): Int? {
+        if (byteSize <= 0L) return null
+        val count = ((byteSize - 1L) / CHUNK_BYTES.toLong()) + 1L
+        return count.takeIf { it <= Int.MAX_VALUE.toLong() }?.toInt()
     }
 
     private fun validTransferId(value: String) = transferIdPattern.matches(value)

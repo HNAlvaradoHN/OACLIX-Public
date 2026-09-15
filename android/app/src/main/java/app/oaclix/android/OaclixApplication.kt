@@ -3,39 +3,29 @@ package app.oaclix.android
 import android.app.Activity
 import android.app.Application
 import android.os.Bundle
-import app.oaclix.android.share.NativeForegroundReceiverGate
-import app.oaclix.android.share.NativeImageReceiptBus
-import app.oaclix.android.share.NativeImageRelayForegroundController
+import app.oaclix.android.background.BackgroundDirectAvailabilityService
+import app.oaclix.android.background.BackgroundDirectRuntime
 
 class OaclixApplication : Application(), Application.ActivityLifecycleCallbacks {
-    private lateinit var imageRelayController: NativeImageRelayForegroundController
-    private lateinit var receiverGate: NativeForegroundReceiverGate
-
     override fun onCreate() {
         super.onCreate()
-        imageRelayController = NativeImageRelayForegroundController(this) {
-            NativeImageReceiptBus.publishStored()
-        }
-        receiverGate = NativeForegroundReceiverGate(
-            onFirstSurfaceStarted = imageRelayController::start,
-            onLastSurfaceStopped = imageRelayController::stop,
-        )
         registerActivityLifecycleCallbacks(this)
     }
 
     override fun onTerminate() {
-        if (::receiverGate.isInitialized) receiverGate.close()
-        if (::imageRelayController.isInitialized) imageRelayController.close()
         unregisterActivityLifecycleCallbacks(this)
         super.onTerminate()
     }
 
     override fun onActivityStarted(activity: Activity) {
-        receiverGate.surfaceStarted()
+        if (activity !is MainActivity) return
+        BackgroundDirectRuntime.setMainVisible(true)
+        BackgroundDirectAvailabilityService.ensureStartedIfEnabled(this)
     }
 
     override fun onActivityStopped(activity: Activity) {
-        receiverGate.surfaceStopped()
+        if (activity !is MainActivity) return
+        BackgroundDirectRuntime.setMainVisible(false)
     }
 
     override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit

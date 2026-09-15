@@ -37,7 +37,7 @@ export type LocalImageDirectPayload = {
 }
 
 export type LocalImageDirectSender = {
-  getValidatedPeerIds(): string[]
+  getImageDirectPeerIds(): string[]
   sendLocalImageDirect(remoteDeviceId: string, transfer: LocalImageDirectTransfer, blob: Blob): Promise<boolean>
   sendLocalImageDirectAck(remoteDeviceId: string, ack: LocalImageDirectTransferAck): boolean
 }

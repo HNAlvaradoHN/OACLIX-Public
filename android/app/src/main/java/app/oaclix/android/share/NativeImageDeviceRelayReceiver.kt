@@ -1,6 +1,8 @@
 package app.oaclix.android.share
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import app.oaclix.android.identity.AndroidKeystoreDeviceIdentity
 import app.oaclix.android.identity.NativeIdentityApi
 import app.oaclix.android.identity.NativeIdentityLinkingApi
@@ -14,6 +16,9 @@ import okhttp3.WebSocketListener
 import org.json.JSONObject
 import java.net.URL
 import java.util.Base64
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
 internal class NativeImageDeviceRelayReceiver(
@@ -25,6 +30,7 @@ internal class NativeImageDeviceRelayReceiver(
 ) {
     private val normalizedBaseUrl = NativeIdentityApi.normalizeBaseUrl(baseUrl)
     private val socketRef = AtomicReference<WebSocket?>(null)
+    private val directManagerRef = AtomicReference<NativeDirectImagePeerManager?>(null)
     private val imageStore = ImageClipboardStore(context)
     private val receipts = context.getSharedPreferences(RECEIPT_PREFERENCES, Context.MODE_PRIVATE)
 
@@ -34,6 +40,9 @@ internal class NativeImageDeviceRelayReceiver(
         if (!bootstrap.authenticated || !bootstrap.persisted) return
         val roomId = bootstrap.generalRoomId ?: return
         val deviceId = bootstrap.deviceId
+
+        val directManager = createDirectManagerOnMainThread(deviceId)
+        directManagerRef.set(directManager)
 
         val proof = identity.signAction("realtime.connect", JSONObject().put("roomId", roomId).toString())
         val envelope = NativeIdentityLinkingApi.signedEnvelopeBody(proof)
@@ -46,29 +55,84 @@ internal class NativeImageDeviceRelayReceiver(
             .header("Sec-WebSocket-Protocol", "oaclix-v1, $authProtocol")
             .build()
 
+        val connectionClosed = AtomicBoolean(false)
         val socket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onMessage(webSocket: WebSocket, text: String) {
                 val message = runCatching { JSONObject(text) }.getOrNull() ?: return
-                if (message.optString("type") != "device-image-transfer") return
-                val fromDeviceId = message.optString("fromDeviceId")
-                if (!DEVICE_ID_PATTERN.matches(fromDeviceId) || fromDeviceId == deviceId) return
-                val transfer = message.optJSONObject("transfer") ?: return
-                handleTransfer(webSocket, transfer, fromDeviceId, deviceId)
+                when (message.optString("type")) {
+                    "presence" -> directManager?.handlePresence(message)
+                    "signal" -> directManager?.handleSignal(message)
+                    "device-image-transfer" -> {
+                        val fromDeviceId = message.optString("fromDeviceId")
+                        if (!DEVICE_ID_PATTERN.matches(fromDeviceId) || fromDeviceId == deviceId) return
+                        val transfer = message.optJSONObject("transfer") ?: return
+                        handleTransfer(webSocket, transfer, fromDeviceId, deviceId)
+                    }
+                }
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                connectionClosed.set(true)
                 socketRef.compareAndSet(webSocket, null)
+                closeDirectManager(directManager)
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                connectionClosed.set(true)
                 socketRef.compareAndSet(webSocket, null)
+                closeDirectManager(directManager)
             }
         })
-        if (!socketRef.compareAndSet(null, socket)) socket.close(1000, "Receptor duplicado")
+        if (!socketRef.compareAndSet(null, socket)) {
+            closeDirectManager(directManager)
+            socket.close(1000, "Receptor duplicado")
+            return
+        }
+        if (connectionClosed.get() && socketRef.compareAndSet(socket, null)) {
+            closeDirectManager(directManager)
+        }
     }
 
     fun stop() {
+        directManagerRef.getAndSet(null)?.close()
         socketRef.getAndSet(null)?.close(1000, "OACLIX en pausa")
+    }
+
+    private fun createDirectManagerOnMainThread(deviceId: String): NativeDirectImagePeerManager? {
+        fun create(): NativeDirectImagePeerManager? = runCatching {
+            NativeDirectImagePeerManager(
+                context = context,
+                currentDeviceId = deviceId,
+                sendRealtimeFrame = { frame -> socketRef.get()?.send(frame.toString()) == true },
+                onStored = onStored,
+            )
+        }.getOrNull()
+
+        if (Looper.myLooper() == Looper.getMainLooper()) return create()
+
+        val result = AtomicReference<NativeDirectImagePeerManager?>(null)
+        val completed = CountDownLatch(1)
+        val abandoned = AtomicBoolean(false)
+        val posted = Handler(Looper.getMainLooper()).post {
+            val manager = create()
+            if (abandoned.get()) manager?.close() else result.set(manager)
+            completed.countDown()
+        }
+        if (!posted) return null
+
+        val ready = runCatching {
+            completed.await(DIRECT_MANAGER_INIT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        }.getOrDefault(false)
+        if (!ready) {
+            abandoned.set(true)
+            return null
+        }
+        return result.get()
+    }
+
+    private fun closeDirectManager(manager: NativeDirectImagePeerManager?) {
+        if (manager == null) return
+        if (directManagerRef.compareAndSet(manager, null)) manager.close()
     }
 
     private fun handleTransfer(
@@ -184,6 +248,7 @@ internal class NativeImageDeviceRelayReceiver(
     companion object {
         private const val RECEIPT_PREFERENCES = "oaclix_received_image_relay"
         private const val CLOCK_SKEW_MS = 5L * 60L * 1000L
+        private const val DIRECT_MANAGER_INIT_TIMEOUT_MS = 5_000L
         private val DEVICE_ID_PATTERN = Regex("^dev_[A-Za-z0-9_-]{16,64}$")
         private val TRANSFER_ID_PATTERN = Regex("^xfr_[a-f0-9]{24}$")
         private val ITEM_ID_PATTERN = Regex("^itm_[a-f0-9]{32}$")

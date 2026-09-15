@@ -52,11 +52,22 @@ jobs:
     timeout-minutes: 30
     env:
       OACLIX_ANDROID_VERSION_CODE: ${{ github.run_number }}
+      OACLIX_API_BASE_URL: ${{ secrets.OACLIX_API_BASE_URL }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '22'
+
+      - name: Build Android web bundle
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build:android-web
 
       - name: Require Gradle dependency verification
         working-directory: android
@@ -100,6 +111,27 @@ jobs:
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
+      - name: Isolate PR debug installation
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: echo "OACLIX_ANDROID_APPLICATION_ID_SUFFIX=.pr${{ github.event.pull_request.number }}" >> "$GITHUB_ENV"
+
       - name: Test and assemble Android
         working-directory: android
-        run: ./gradlew testDebugUnitTest assembleDebug --no-daemon
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle_args=(testDebugUnitTest assembleDebug --no-daemon)
+          if [[ -n "${OACLIX_API_BASE_URL:-}" ]]; then
+            gradle_args+=("-POACLIX_API_BASE_URL=${OACLIX_API_BASE_URL}")
+          fi
+          ./gradlew "${gradle_args[@]}"
+
+      - name: Publish PR debug APK
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: oaclix-pr-${{ github.event.pull_request.number }}-android-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 3

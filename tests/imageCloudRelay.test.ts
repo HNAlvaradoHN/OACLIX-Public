@@ -101,31 +101,50 @@ test('relay code stores before acknowledging and never advertises this route as 
   assert.doesNotMatch(shareReceiver, /Imagen enviada por Directo/)
 })
 
-test('Android image reception is foreground-scoped at application level and separated from the UI thread', async () => {
-  const [controller, application, gate, manifest, mainActivity] = await Promise.all([
+test('PWA owns Direct in foreground and connectedDevice service takes over only in Android background', async () => {
+  const [controller, application, service, manifest, bridge, shareReceiver, foregroundWebReceiver, option] = await Promise.all([
     read('android/app/src/main/java/app/oaclix/android/share/NativeImageRelayForegroundController.kt'),
     read('android/app/src/main/java/app/oaclix/android/OaclixApplication.kt'),
-    read('android/app/src/main/java/app/oaclix/android/share/NativeForegroundReceiverGate.kt'),
+    read('android/app/src/main/java/app/oaclix/android/background/BackgroundDirectAvailabilityService.kt'),
     read('android/app/src/main/AndroidManifest.xml'),
-    read('android/app/src/main/java/app/oaclix/android/MainActivity.kt'),
+    read('android/app/src/main/java/app/oaclix/android/OaclixWebBridge.kt'),
+    read('android/app/src/main/java/app/oaclix/android/ShareReceiverActivity.kt'),
+    read('src/components/ForegroundLinkedImageReceiver.tsx'),
+    read('src/components/AndroidBackgroundReceivingOption.tsx'),
   ])
 
-  assert.match(controller, /Executors\.newSingleThreadExecutor\(\)/)
   assert.match(controller, /NativeImageDeviceRelayReceiver/)
-  assert.match(controller, /executor\.execute/)
   assert.match(controller, /receiver\?\.stop\(\)/)
-  assert.match(manifest, /android:name="\.OaclixApplication"/)
-  assert.match(application, /Application\.ActivityLifecycleCallbacks/)
-  assert.match(application, /onFirstSurfaceStarted = imageRelayController::start/)
-  assert.match(application, /onLastSurfaceStopped = imageRelayController::stop/)
-  assert.match(application, /override fun onActivityStarted[\s\S]*receiverGate\.surfaceStarted\(\)/)
-  assert.match(application, /override fun onActivityStopped[\s\S]*receiverGate\.surfaceStopped\(\)/)
-  assert.match(gate, /startedSurfaces/)
-  assert.match(gate, /if \(startedSurfaces != 0 \|\| !active\) return/)
-  assert.doesNotMatch(mainActivity, /imageRelayController\.start\(\)/)
-  assert.doesNotMatch(mainActivity, /imageRelayController\.stop\(\)/)
-  assert.match(mainActivity, /NativeImageReceiptBus/)
-  assert.match(mainActivity, /R\.string\.image_received_cloud/)
+  assert.match(manifest, /android\.permission\.FOREGROUND_SERVICE/)
+  assert.match(manifest, /android\.permission\.FOREGROUND_SERVICE_CONNECTED_DEVICE/)
+  assert.match(manifest, /android:foregroundServiceType="connectedDevice"/)
+  assert.doesNotMatch(manifest, /android:foregroundServiceType="dataSync"/)
+
+  assert.match(application, /BackgroundDirectRuntime\.setMainVisible\(true\)/)
+  assert.match(application, /BackgroundDirectAvailabilityService\.ensureStartedIfEnabled\(this\)/)
+  assert.match(application, /BackgroundDirectRuntime\.setMainVisible\(false\)/)
+  assert.doesNotMatch(application, /NativeImageRelayForegroundController|NativeForegroundReceiverGate/)
+
+  assert.match(service, /FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE/)
+  assert.match(service, /startForegroundService/)
+  assert.match(service, /START_STICKY/)
+  assert.match(service, /!BackgroundDirectRuntime\.mainVisible/)
+  assert.match(service, /BACKGROUND_HANDOFF_DELAY_MS = 500L/)
+  assert.match(service, /postDelayed\(activate, BACKGROUND_HANDOFF_DELAY_MS\)/)
+  assert.match(service, /relayController\.start\(\)/)
+  assert.match(service, /relayController\.stop\(\)/)
+  assert.match(service, /ACTION_DISABLE/)
+  assert.match(service, /BackgroundDirectRuntime\.mainVisible/)
+
+  assert.match(bridge, /isBackgroundDirectEnabled/)
+  assert.match(bridge, /setBackgroundDirectEnabled/)
+  assert.match(option, /Imágenes Directo en segundo plano/)
+  assert.match(option, /setBackgroundDirectEnabled/)
+
+  assert.doesNotMatch(shareReceiver, /NativeImageDeviceRelayReceiver|NativeDirectImagePeerManager|PeerConnectionFactory/)
+  assert.match(foregroundWebReceiver, /ensureClipboardRoomForegroundReception/)
+  assert.match(foregroundWebReceiver, /suspendClipboardRoomForegroundReception/)
+  assert.match(foregroundWebReceiver, /document\.visibilityState !== 'visible'/)
 })
 
 test('cloud optimization is a separate stable copy and the PWA exposes stored received images locally', async () => {
