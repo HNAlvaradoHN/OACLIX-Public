@@ -119,6 +119,15 @@ jobs:
           ./gradlew --write-verification-metadata sha256 :app:dependencies --configuration debugRuntimeClasspath --no-daemon >/dev/null
           sed -n '/group="io.github.webrtc-sdk"/,/<\/component>/p' gradle/verification-metadata.xml
 
+      - name: Publish generated verification metadata
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: oaclix-pr-${{ github.event.pull_request.number }}-verification-metadata
+          path: android/gradle/verification-metadata.xml
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Isolate PR debug installation
         if: github.event_name == 'pull_request'
         shell: bash
