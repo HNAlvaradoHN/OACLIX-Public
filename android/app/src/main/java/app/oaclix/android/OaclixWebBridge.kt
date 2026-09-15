@@ -2,6 +2,7 @@ package app.oaclix.android
 
 import android.content.Context
 import android.webkit.JavascriptInterface
+import app.oaclix.android.background.BackgroundDirectAvailabilityService
 import app.oaclix.android.identity.AndroidKeystoreDeviceIdentity
 import app.oaclix.android.imageclipboard.ImageClipboardStore
 import org.json.JSONArray
@@ -12,7 +13,8 @@ internal class OaclixWebBridge(
     context: Context,
     private val identity: AndroidKeystoreDeviceIdentity = AndroidKeystoreDeviceIdentity(),
 ) {
-    private val imageStore = ImageClipboardStore(context.applicationContext)
+    private val appContext = context.applicationContext
+    private val imageStore = ImageClipboardStore(appContext)
 
     @JavascriptInterface
     fun getDeviceId(): String = identity.getOrCreateSnapshot().deviceId
@@ -56,6 +58,14 @@ internal class OaclixWebBridge(
             .put("signature", proof.signature)
             .toString()
     }
+
+    @JavascriptInterface
+    fun isBackgroundDirectEnabled(): Boolean =
+        BackgroundDirectAvailabilityService.isEnabled(appContext)
+
+    @JavascriptInterface
+    fun setBackgroundDirectEnabled(enabled: Boolean): Boolean =
+        BackgroundDirectAvailabilityService.setEnabled(appContext, enabled)
 
     @JavascriptInterface
     fun listLocalImages(): String = JSONArray().apply {
