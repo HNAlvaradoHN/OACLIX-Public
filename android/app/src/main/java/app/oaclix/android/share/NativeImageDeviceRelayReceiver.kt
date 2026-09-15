@@ -41,9 +41,6 @@ internal class NativeImageDeviceRelayReceiver(
         val roomId = bootstrap.generalRoomId ?: return
         val deviceId = bootstrap.deviceId
 
-        val directManager = createDirectManagerOnMainThread(deviceId)
-        directManagerRef.set(directManager)
-
         val proof = identity.signAction("realtime.connect", JSONObject().put("roomId", roomId).toString())
         val envelope = NativeIdentityLinkingApi.signedEnvelopeBody(proof)
         val authProtocol = "oaclix-auth-${NativeDeviceShareTransport.base64Url(envelope)}"
@@ -60,8 +57,8 @@ internal class NativeImageDeviceRelayReceiver(
             override fun onMessage(webSocket: WebSocket, text: String) {
                 val message = runCatching { JSONObject(text) }.getOrNull() ?: return
                 when (message.optString("type")) {
-                    "presence" -> directManager?.handlePresence(message)
-                    "signal" -> directManager?.handleSignal(message)
+                    "presence" -> handlePresence(message, deviceId)
+                    "signal" -> directManagerRef.get()?.handleSignal(message)
                     "device-image-transfer" -> {
                         val fromDeviceId = message.optString("fromDeviceId")
                         if (!DEVICE_ID_PATTERN.matches(fromDeviceId) || fromDeviceId == deviceId) return
@@ -74,28 +71,49 @@ internal class NativeImageDeviceRelayReceiver(
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 connectionClosed.set(true)
                 socketRef.compareAndSet(webSocket, null)
-                closeDirectManager(directManager)
+                closeCurrentDirectManager()
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 connectionClosed.set(true)
                 socketRef.compareAndSet(webSocket, null)
-                closeDirectManager(directManager)
+                closeCurrentDirectManager()
             }
         })
         if (!socketRef.compareAndSet(null, socket)) {
-            closeDirectManager(directManager)
             socket.close(1000, "Receptor duplicado")
             return
         }
         if (connectionClosed.get() && socketRef.compareAndSet(socket, null)) {
-            closeDirectManager(directManager)
+            closeCurrentDirectManager()
         }
     }
 
     fun stop() {
-        directManagerRef.getAndSet(null)?.close()
+        closeCurrentDirectManager()
         socketRef.getAndSet(null)?.close(1000, "OACLIX en pausa")
+    }
+
+    private fun handlePresence(message: JSONObject, deviceId: String) {
+        val current = directManagerRef.get()
+        if (current != null) {
+            current.handlePresence(message)
+            return
+        }
+
+        val peers = NativeDirectSignalProtocol.parsePresence(message) ?: return
+        if (peers.none { it.deviceId == deviceId } || peers.none { it.deviceId != deviceId }) return
+        ensureDirectManagerOnMainThread(deviceId)?.handlePresence(message)
+    }
+
+    private fun ensureDirectManagerOnMainThread(deviceId: String): NativeDirectImagePeerManager? {
+        directManagerRef.get()?.let { return it }
+        synchronized(directManagerRef) {
+            directManagerRef.get()?.let { return it }
+            val created = createDirectManagerOnMainThread(deviceId) ?: return null
+            directManagerRef.set(created)
+            return created
+        }
     }
 
     private fun createDirectManagerOnMainThread(deviceId: String): NativeDirectImagePeerManager? {
@@ -130,9 +148,8 @@ internal class NativeImageDeviceRelayReceiver(
         return result.get()
     }
 
-    private fun closeDirectManager(manager: NativeDirectImagePeerManager?) {
-        if (manager == null) return
-        if (directManagerRef.compareAndSet(manager, null)) manager.close()
+    private fun closeCurrentDirectManager() {
+        directManagerRef.getAndSet(null)?.close()
     }
 
     private fun handleTransfer(
