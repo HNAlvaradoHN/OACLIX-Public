@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: verify-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -111,22 +111,57 @@ jobs:
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
-      - name: Probe WebRTC verification metadata
+      - name: Detect one-time M144 metadata migration
+        shell: bash
+        run: |
+          if grep -q 'android-prefixed-stripped" version="150.7871.01"' android/gradle/verification-metadata.xml; then
+            echo "OACLIX_COMMIT_M144_METADATA=1" >> "$GITHUB_ENV"
+          fi
+
+      - name: Generate M144 verification metadata
         working-directory: android
         shell: bash
         run: |
           set -euo pipefail
           ./gradlew --write-verification-metadata sha256 :app:dependencies --configuration debugRuntimeClasspath --no-daemon >/dev/null
-          sed -n '/group="io.github.webrtc-sdk"/,/<\/component>/p' gradle/verification-metadata.xml
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('gradle/verification-metadata.xml')
+          text = path.read_text()
+          marker = '<component group="io.github.webrtc-sdk" name="android-prefixed-stripped" version="150.7871.01">'
+          if marker in text:
+              start = text.index(marker)
+              line_start = text.rfind('\n', 0, start) + 1
+              end = text.index('</component>', start) + len('</component>')
+              if end < len(text) and text[end] == '\n':
+                  end += 1
+              text = text[:line_start] + text[end:]
+              path.write_text(text)
+          PY
 
-      - name: Publish generated verification metadata
-        if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
-        with:
-          name: oaclix-pr-${{ github.event.pull_request.number }}-verification-metadata
-          path: android/gradle/verification-metadata.xml
-          if-no-files-found: error
-          retention-days: 1
+      - name: Commit M144 verification metadata once
+        if: env.OACLIX_COMMIT_M144_METADATA == '1' && github.event_name == 'pull_request'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          file='android/gradle/verification-metadata.xml'
+          sha="$(git rev-parse "HEAD:${file}")"
+          content="$(base64 -w0 "$file")"
+          payload="$(jq -n \
+            --arg message 'build(android): verify M144 WebRTC dependency' \
+            --arg content "$content" \
+            --arg sha "$sha" \
+            --arg branch '${{ github.head_ref }}' \
+            '{message:$message,content:$content,sha:$sha,branch:$branch}')"
+          curl --fail --silent --show-error \
+            --request PUT \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/contents/${file}" \
+            --data "$payload" >/dev/null
 
       - name: Isolate PR debug installation
         if: github.event_name == 'pull_request'
