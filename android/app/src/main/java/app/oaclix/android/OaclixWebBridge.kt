@@ -3,6 +3,7 @@ package app.oaclix.android
 import android.webkit.JavascriptInterface
 import app.oaclix.android.identity.AndroidKeystoreDeviceIdentity
 import org.json.JSONObject
+import org.json.JSONTokener
 
 internal class OaclixWebBridge(
     private val identity: AndroidKeystoreDeviceIdentity = AndroidKeystoreDeviceIdentity(),
@@ -32,7 +33,7 @@ internal class OaclixWebBridge(
     @JavascriptInterface
     fun signAction(action: String, payloadJson: String): String {
         require(action.isNotBlank()) { "Acción de identidad inválida" }
-        JSONObject(payloadJson)
+        JSONTokener(payloadJson).nextValue() ?: error("Payload JSON inválido")
         val proof = identity.signAction(action, payloadJson)
         return JSONObject()
             .put("version", proof.version)
