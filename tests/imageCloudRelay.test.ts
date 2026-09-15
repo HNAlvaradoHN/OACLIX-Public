@@ -129,13 +129,16 @@ test('PWA owns Direct in foreground and connectedDevice service takes over only 
   assert.match(service, /startForegroundService/)
   assert.match(service, /START_STICKY/)
   assert.match(service, /!BackgroundDirectRuntime\.mainVisible/)
-  assert.match(service, /if \(shouldReceive\) relayController\.start\(\) else relayController\.stop\(\)/)
+  assert.match(service, /BACKGROUND_HANDOFF_DELAY_MS = 500L/)
+  assert.match(service, /postDelayed\(activate, BACKGROUND_HANDOFF_DELAY_MS\)/)
+  assert.match(service, /relayController\.start\(\)/)
+  assert.match(service, /relayController\.stop\(\)/)
   assert.match(service, /ACTION_DISABLE/)
   assert.match(service, /BackgroundDirectRuntime\.mainVisible/)
 
   assert.match(bridge, /isBackgroundDirectEnabled/)
   assert.match(bridge, /setBackgroundDirectEnabled/)
-  assert.match(option, /Recepción en segundo plano/)
+  assert.match(option, /Imágenes Directo en segundo plano/)
   assert.match(option, /setBackgroundDirectEnabled/)
 
   assert.doesNotMatch(shareReceiver, /NativeImageDeviceRelayReceiver|NativeDirectImagePeerManager|PeerConnectionFactory/)
