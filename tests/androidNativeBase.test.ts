@@ -28,6 +28,8 @@ test('la base Android usa un SDK estable actual y limita red al bloque de identi
   assert.match(appBuild, /orElse\("https:\/\/oaclix\.invalid"\)/)
   assert.match(manifest, /android:allowBackup="false"/)
   assert.match(manifest, /android\.permission\.INTERNET/)
+  assert.match(manifest, /android\.permission\.ACCESS_NETWORK_STATE/)
+  assert.match(manifest, /android\.permission\.CHANGE_NETWORK_STATE/)
   assert.match(manifest, /android:usesCleartextTraffic="false"/)
   assert.match(identityApi, /\/api\/identity\/bootstrap/)
   assert.match(identityApi, /startsWith\("https:\/\/"\)/)
