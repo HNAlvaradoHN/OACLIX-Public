@@ -39,7 +39,10 @@ android {
 
     buildTypes {
         getByName("debug") {
-            applicationIdSuffix = ".dev$ciApplicationIdSuffix"
+            applicationIdSuffix = ".dev"
+            if (ciApplicationIdSuffix.isNotEmpty()) {
+                applicationIdSuffix = ".dev$ciApplicationIdSuffix"
+            }
             versionNameSuffix = "-dev"
         }
 
