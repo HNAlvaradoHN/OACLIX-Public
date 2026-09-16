@@ -31,7 +31,8 @@ test('el roster conocido se comparte entre Vinculados y Enviar para no bloquear 
     /export async function listLinkedDevices\(options: ListLinkedDevicesOptions = \{\}\)[\s\S]*?postSigned[\s\S]*?options[\s\S]*?knownLinkedDevices = cloneLinkedDevices\(result\)/,
   )
   assert.match(authorizationSource, /const knownRoster = await knownAuthorizedShareRoster\(\)/)
-  assert.match(authorizationSource, /if \(knownRoster\) return knownRoster\.devices/)
+  assert.match(authorizationSource, /if \(knownRoster\) return publishAuthorizedRoster\(roomId, knownRoster\)\.devices/)
+  assert.match(authorizationSource, /publishKnownLinkedDeviceIds\(roomId, roster\.devices\.map/)
   assert.match(transportSource, /return loadLinkedShareDevices\(roomId\)/)
   assert.match(panelSource, /loadLocalClipboardShareDevices\(identity\.generalRoomId\)/)
 })

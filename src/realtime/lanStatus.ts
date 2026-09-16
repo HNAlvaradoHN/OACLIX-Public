@@ -6,7 +6,7 @@ import {
   legacyRouteStatusFromAvailability,
   publishDataChannelDeviceIds,
   publishRealtimeOnlineDeviceIds,
-} from './deviceAvailability'
+} from './deviceAvailability.ts'
 
 export type DeviceRouteStatus = 'direct' | 'cloud' | 'offline' | 'checking'
 

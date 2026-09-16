@@ -1,5 +1,5 @@
 import type { TransferControlMessage } from '../shared/transferControlProtocol'
-import { applyTransferControlAvailability } from './deviceAvailability'
+import { applyTransferControlAvailability } from './deviceAvailability.ts'
 
 type TransferControlListener = (message: TransferControlMessage, remoteDeviceId: string) => void
 type TransferControlSender = (targetDeviceId: string, message: TransferControlMessage) => boolean
