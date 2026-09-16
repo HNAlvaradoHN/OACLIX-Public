@@ -1,7 +1,7 @@
 # Plano de control de transferencias — OACLIX
 
 Fecha: 2026-09-15
-Estado: Paso 1 en desarrollo; control online, solicitud offline, disponibilidad separada, autoaceptación confiable, handoff `accepted -> Route Intent` y retry de control implementados en `feat/transfer-control-plane`. PR en draft hasta CI final y cierre del gate integrado.
+Estado: Paso 1 con gate de desarrollo completo en `feat/transfer-control-plane`. CI #117 verificó Web/Worker, tests, lint, build, auditoría pública y Android. Esto no convierte todavía la migración completa de Directo en versión estable ni sustituye las pruebas físicas de etapas posteriores.
 
 ## Objetivo
 
@@ -110,18 +110,18 @@ Fuentes públicas: `https://developers.cloudflare.com/durable-objects/platform/p
 
 Los límites de cola y la expiración corta existen también para evitar consumo innecesario. Si el plan de Cloudflare cambia, estas condiciones deben volver a verificarse antes de activar o ampliar esta función.
 
-## Gate para cerrar el Paso 1
+## Gate del Paso 1 — resultado
 
-Antes de declarar el Paso 1 concluido deben quedar verdes las verificaciones que demuestran:
+El gate de desarrollo quedó verde en CI #117 sobre el commit previo de runtime/documentación:
 
 1. `request -> autoaccepted -> route-intent` produce un único intent y cero bytes por el nuevo plano de control;
 2. un peer no confiable no puede usar la política de autoaceptación;
 3. una respuesta de otro dispositivo, solicitud vencida o emisor sin solicitud viva no inicia nada;
 4. una reconexión reintenta solo solicitudes vivas;
-5. Web/Worker, lint, build, auditoría pública y Android siguen verdes.
+5. Web/Worker, tests, lint, build, auditoría pública y Android pasaron.
 
 El relay antiguo de contenido permanece durante la migración y se retirará únicamente cuando los siguientes pasos tengan un transporte sustituto probado. El wake Android con app cerrada también queda explícitamente pendiente para el paso de background/wake; no debe confundirse con un fallo de este contrato de control.
 
 ## Siguiente paso exacto
 
-Una vez verde el gate anterior, cerrar el Paso 1 como base del nuevo plano de control y comenzar el Paso 2: Transfer Engine independiente del transporte (manifest/chunks, hashes, journal, retry/resume e integridad), sin conectar todavía grandes payloads al WebSocket de control.
+Comenzar el Paso 2 en una rama dependiente y separada: Transfer Engine independiente del transporte. Primer checkpoint: contrato de manifest/chunks/hash y journal de progreso/reanudación, sin conectar todavía grandes payloads al WebSocket de control ni sustituir las rutas legacy.
