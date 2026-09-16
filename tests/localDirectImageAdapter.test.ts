@@ -127,6 +127,28 @@ test('fallo o ACK no almacenado de Directo conserva estado reanudable y no adela
   assert.deepEqual(operation.journal.completedRanges, [])
 })
 
+test('imagen local ausente conserva estado preparado y no toca el transporte', async () => {
+  const item = imageItem()
+  const { operation, selection } = await preparedImage(item)
+  let sendCalls = 0
+  let deleteCalls = 0
+
+  await assert.rejects(
+    () => executeLocalDirectImageTransfer('room_image_adapter', operation, selection, {
+      loadImageItem: async () => null,
+      sendImage: async () => { sendCalls += 1 },
+      deleteState: async () => { deleteCalls += 1 },
+      now: () => now,
+    }),
+    /imagen local ya no está disponible/,
+  )
+
+  assert.equal(sendCalls, 0)
+  assert.equal(deleteCalls, 0)
+  assert.equal(operation.journal.status, 'prepared')
+  assert.deepEqual(operation.journal.completedRanges, [])
+})
+
 test('una selección unavailable no puede activar el adaptador de imagen', async () => {
   const item = imageItem()
   const { operation, selection } = await preparedImage(item)
