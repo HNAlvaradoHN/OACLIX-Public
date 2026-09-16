@@ -1,7 +1,7 @@
 # Transfer Engine — OACLIX
 
 Fecha: 2026-09-16
-Estado: Paso 2 en desarrollo sobre `feat/transfer-engine`, dependiente del Paso 1 (`feat/transfer-control-plane`). Checkpoints 1–7 pasaron CI #119, #120, #122, #124, #126, #130 y #132.
+Estado: Paso 2 en desarrollo sobre `feat/transfer-engine`, dependiente del Paso 1 (`feat/transfer-control-plane`). Checkpoints 1–8 pasaron CI #119, #120, #122, #124, #126, #130, #132 y #134.
 
 ## Objetivo
 
@@ -73,6 +73,22 @@ El adaptador permanece aislado: no sustituye rutas legacy, no agrega relay ni mu
 
 Gate: CI #132 verde en auditoría, tests, lint, build, Web/Worker y Android sobre `699b1ff5ec342b60018a1465572ff06b7c6c5d50`.
 
+## Checkpoint 8 — dispatcher del data plane ✅
+
+`src/transfer/transferDataPlaneDispatcher.ts` convierte la selección del Route Manager en una ejecución controlada sin conocer transportes legacy:
+
+1. valida sala y correlación exacta entre operación preparada y `TransferRouteSelection`;
+2. solo acepta `status = selected` con `route = local-direct`;
+3. texto se entrega únicamente a `executeLocalDirectTextTransfer` e imagen únicamente a `executeLocalDirectImageTransfer`;
+4. `unavailable`, archivo o combinaciones no soportadas se rechazan antes de invocar un adaptador;
+5. el dispatcher no llama WebSocket, relay, RTCDataChannel ni transportes legacy directamente;
+6. `createTransferDataPlaneHandoff` expone un callback reutilizable para `TransferSendCoordinator`;
+7. `TransferSendCoordinator` ahora espera `onHandoff` asíncrono y propaga sus fallos reales a `onError`, evitando errores silenciosos del data plane.
+
+El dispatcher sigue aislado del producto: `App.tsx` todavía usa directamente los transportes legacy para los botones de envío local.
+
+Gate: CI #134 verde en auditoría, tests, lint, build, Web/Worker y Android sobre `79b8d04bf03714903ae6af68edf9ba9fe2cf193d`.
+
 ## Privacidad, seguridad y costo
 
 - El WebSocket de control sigue sin transportar payload pesado.
@@ -83,12 +99,12 @@ Gate: CI #132 verde en auditoría, tests, lint, build, Web/Worker y Android sobr
 
 ## No sustituye todavía
 
-- rutas legacy de texto/imágenes;
-- integración de los adaptadores con el flujo de producto;
+- rutas legacy de texto/imágenes en `App.tsx`;
+- frontera de producto que espere request → aceptación → selección → data plane;
 - transferencia de archivos por el nuevo data plane;
 - Android wake/background;
 - fallback remoto del nuevo data plane.
 
 ## Siguiente checkpoint exacto
 
-Checkpoint 8: crear el dispatcher/executor del data plane que consuma el `onHandoff` de `TransferSendCoordinator`, valide la `TransferRouteSelection` y despache únicamente `local-direct` hacia el adaptador correcto de texto o imagen. Debe rechazar selecciones `unavailable` o combinaciones no soportadas, no mover bytes por sí mismo y mantener las rutas legacy de producto intactas. La conexión a la UI/flujo de producción queda para un checkpoint posterior, después de validar este dispatcher de forma aislada.
+Checkpoint 9: crear una frontera de envío del producto para texto/imagen local que mantenga por sala un `TransferSendCoordinator`, use `createPreparedTransferRouteManager` + `createTransferDataPlaneHandoff`, registre la fuente con `sendTransferRequestForSource` y devuelva una `Promise` que solo resuelva cuando la solicitud correlacionada termine realmente en el dispatcher. Debe correlacionar por `requestId`, propagar `unavailable`/errores, limpiar esperas vencidas o al desconectar y no modificar todavía `App.tsx` ni los botones actuales. Solo después de validar esa frontera de forma aislada podrá un checkpoint posterior sustituir el callback legacy de producto.
