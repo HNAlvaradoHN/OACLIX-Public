@@ -17,10 +17,29 @@ test('RealtimeSignalClient usa un envelope de control separado del payload legad
   assert.match(source, /publishTransferControl\(this\.roomId, message\.message, message\.fromDeviceId\)/)
 })
 
-test('RealtimeHub valida transfer-control antes de reenviarlo y conserva el relay viejo durante migración', async () => {
+test('RealtimeHub valida transfer-control y conserva el relay viejo durante migración', async () => {
   const source = await read('worker/realtime/realtimeHub.ts')
 
   assert.match(source, /const control = parseTransferControlInput\(parsed, current\.deviceId\)/)
   assert.match(source, /type: 'transfer-control',[\s\S]*?fromDeviceId: current\.deviceId,[\s\S]*?message: control\.message/)
   assert.match(source, /const relay = parseDeviceRelayInput\(parsed, current\.deviceId\)/)
+})
+
+test('solo transfer-request puede quedar pendiente y se entrega al reconectar', async () => {
+  const source = await read('worker/realtime/realtimeHub.ts')
+
+  assert.match(source, /control\.message\.type === 'transfer-request'/)
+  assert.match(source, /transferControlRequestIsLive\(control\.message, Date\.now\(\)\)/)
+  assert.match(source, /await this\.queuePendingTransferRequest\(current, control\.message\)/)
+  assert.match(source, /await this\.deliverPendingTransferRequests\(server, personId, deviceId\)/)
+  assert.match(source, /PENDING_TRANSFER_STORAGE_KEY/)
+  assert.match(source, /this\.ctx\.storage\.setAlarm\(nextExpiry\)/)
+  assert.match(source, /this\.ctx\.storage\.deleteAlarm\(\)/)
+})
+
+test('resolver o desvincular limpia solicitudes pendientes', async () => {
+  const source = await read('worker/realtime/realtimeHub.ts')
+
+  assert.match(source, /await this\.resolvePendingTransferRequest\(control\.message, Date\.now\(\)\)/)
+  assert.match(source, /removePendingTransferRequestsForDevice\(pending, deviceId, now\)/)
 })
