@@ -1,5 +1,9 @@
 import type { TransferControlMessage } from '../shared/transferControlProtocol'
 import { applyTransferControlAvailability } from './deviceAvailability.ts'
+import {
+  observeReceivedTransferControlForRouteIntent,
+  trackSentTransferControl,
+} from './transferRouteIntent.ts'
 
 type TransferControlListener = (message: TransferControlMessage, remoteDeviceId: string) => void
 type TransferControlSender = (targetDeviceId: string, message: TransferControlMessage) => boolean
@@ -17,7 +21,10 @@ export function sendTransferControl(
   message: TransferControlMessage,
 ) {
   const sent = sendersByRoom.get(roomId)?.(targetDeviceId, message) ?? false
-  if (sent) applyTransferControlAvailability(roomId, targetDeviceId, message)
+  if (sent) {
+    applyTransferControlAvailability(roomId, targetDeviceId, message)
+    trackSentTransferControl(roomId, targetDeviceId, message)
+  }
   return sent
 }
 
@@ -43,6 +50,7 @@ export function publishTransferControl(
   remoteDeviceId: string,
 ) {
   applyTransferControlAvailability(roomId, remoteDeviceId, message)
+  observeReceivedTransferControlForRouteIntent(roomId, remoteDeviceId, message)
   for (const listener of listenersByRoom.get(roomId) ?? []) {
     listener(message, remoteDeviceId)
   }
