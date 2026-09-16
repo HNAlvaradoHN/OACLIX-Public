@@ -30,9 +30,11 @@ import {
   heartbeatIdleDelay,
   type HeartbeatPhase,
 } from './heartbeatPolicy'
+import { createAutomaticTrustedTransferDecision } from './transferAcceptancePolicy'
 import {
   publishTransferControl,
   registerTransferControlSender,
+  sendTransferControl,
 } from './transferControlBus'
 
 export type RealtimeSignal =
@@ -403,6 +405,18 @@ export class RealtimeSignalClient {
           && validTransferControlForRoute(message.message, message.fromDeviceId, this.readyDeviceId)
         ) {
           publishTransferControl(this.roomId, message.message, message.fromDeviceId)
+          if (message.message.type === 'transfer-request') {
+            // RealtimeHub entrega este frame solo después de autenticar ambos dispositivos
+            // dentro de la misma identidad. En ese límite de confianza, el receptor propio
+            // autoacepta sin mostrar una confirmación por cada transferencia.
+            const decision = createAutomaticTrustedTransferDecision(message.message, {
+              localDeviceId: this.readyDeviceId,
+              remoteDeviceId: message.fromDeviceId,
+              trustedSameIdentity: true,
+              decidedAt: Date.now(),
+            })
+            if (decision) sendTransferControl(this.roomId, message.fromDeviceId, decision)
+          }
           this.handlers.onTransferControl?.(message.fromDeviceId, message.message)
           return
         }
