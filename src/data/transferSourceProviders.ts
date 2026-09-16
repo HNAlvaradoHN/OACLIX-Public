@@ -40,6 +40,14 @@ export async function loadLocalTextTransferItem(
   return (await readLocalClipboardTexts(now)).find((candidate) => candidate.id === reference.itemId) ?? null
 }
 
+export async function loadLocalImageTransferItem(
+  reference: TransferSourceReference,
+  now = Date.now(),
+): Promise<LocalImageClipboardSnapshot | null> {
+  if (!validTransferSourceReference(reference) || reference.provider !== 'local-image') return null
+  return (await readLocalImages(now)).find((candidate) => candidate.id === reference.itemId) ?? null
+}
+
 export async function reopenLocalTransferChunkSource(
   reference: TransferSourceReference,
   now = Date.now(),
@@ -51,6 +59,6 @@ export async function reopenLocalTransferChunkSource(
     return item ? createLocalTextTransferChunkSource(item) : null
   }
 
-  const image = (await readLocalImages(now)).find((candidate) => candidate.id === reference.itemId)
+  const image = await loadLocalImageTransferItem(reference, now)
   return image ? createLocalImageTransferChunkSource(image) : null
 }
