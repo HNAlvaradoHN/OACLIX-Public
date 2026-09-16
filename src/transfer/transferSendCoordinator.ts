@@ -19,6 +19,10 @@ import {
   openTransferChunkSource,
   type TransferChunkSource,
 } from './transferChunkSource.ts'
+import type {
+  PreparedTransferRouteManager,
+  TransferRouteSelection,
+} from './transferRouteManager.ts'
 
 const MAX_PENDING_SOURCES_PER_ROOM = 32
 const MAX_PENDING_SOURCES_PER_RECEIVER = 8
@@ -29,12 +33,8 @@ type PendingTransferSource = {
   source: TransferChunkSource
 }
 
-export type PreparedTransferRouteManager = {
-  acceptPreparedSenderOperation(operation: PreparedSenderTransferOperation): void | Promise<void>
-}
-
 export type TransferSendCoordinatorHandlers = {
-  onHandoff?(operation: PreparedSenderTransferOperation): void
+  onHandoff?(operation: PreparedSenderTransferOperation, selection: TransferRouteSelection): void
   onUnavailable?(intent: TransferRouteIntent): void
   onError?(intent: TransferRouteIntent, error: unknown): void
 }
@@ -175,7 +175,7 @@ export function connectTransferSendCoordinator(
   const routeHandlers: TransferEngineRouteHandlers = {
     onPrepared(operation) {
       void Promise.resolve(routeManager.acceptPreparedSenderOperation(operation))
-        .then(() => handlers.onHandoff?.(operation))
+        .then((selection) => handlers.onHandoff?.(operation, selection))
         .catch((error) => handlers.onError?.(operation.intent, error))
     },
     onUnavailable: handlers.onUnavailable,

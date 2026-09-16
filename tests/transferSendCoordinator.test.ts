@@ -7,6 +7,8 @@ import {
   sendTransferRequestForSource,
 } from '../src/transfer/transferSendCoordinator.ts'
 import { createBlobTransferChunkSource } from '../src/transfer/transferChunkSource.ts'
+import type { PreparedSenderTransferOperation } from '../src/transfer/transferOperationCoordinator.ts'
+import type { TransferRouteSelection } from '../src/transfer/transferRouteManager.ts'
 import {
   publishTransferControl,
   registerTransferControlSender,
@@ -22,6 +24,21 @@ function source() {
     provider: 'local-text',
     itemId: 'itm_0123456789abcdef0123456789abcdef',
   })
+}
+
+function routeSelection(operation: PreparedSenderTransferOperation): TransferRouteSelection {
+  return {
+    version: 1,
+    type: 'transfer-route-selection',
+    requestId: operation.manifest.requestId,
+    transferId: operation.manifest.transferId,
+    senderDeviceId: operation.manifest.senderDeviceId,
+    receiverDeviceId: operation.manifest.receiverDeviceId,
+    contentKind: operation.manifest.contentKind,
+    status: 'unavailable',
+    route: null,
+    selectedAt: Date.now(),
+  }
 }
 
 test('registra la fuente antes de emitir transfer-request y nunca pone payload en control', async () => {
@@ -58,11 +75,12 @@ test('accepted correlaciona requestId, persiste primero y luego entrega al Route
       acceptPreparedSenderOperation(operation) {
         events.push('route-manager')
         assert.equal(operation.manifest.requestId.length, 28)
+        return routeSelection(operation)
       },
     },
     {
-      onHandoff() {
-        events.push('handoff')
+      onHandoff(_operation, selection) {
+        events.push(`handoff:${selection.status}`)
         resolveHandoff()
       },
       onError(_intent, error) {
@@ -86,7 +104,7 @@ test('accepted correlaciona requestId, persiste primero y luego entrega al Route
   await handedOff
   disconnect()
   assert.equal(hasPendingTransferSource(roomId, request.requestId), false)
-  assert.deepEqual(events, ['persist', 'route-manager', 'handoff'])
+  assert.deepEqual(events, ['persist', 'route-manager', 'handoff:unavailable'])
 })
 
 test('rejected limpia la fuente correlacionada y no entrega nada al Route Manager', async () => {
@@ -95,7 +113,12 @@ test('rejected limpia la fuente correlacionada y no entrega nada al Route Manage
   registerTransferControlSender(roomId, () => true)
   const disconnect = connectTransferSendCoordinator(
     roomId,
-    { acceptPreparedSenderOperation() { routeCalls += 1 } },
+    {
+      acceptPreparedSenderOperation(operation) {
+        routeCalls += 1
+        return routeSelection(operation)
+      },
+    },
     {},
     async () => undefined,
   )
@@ -122,7 +145,12 @@ test('cancel del receptor limpia la fuente pendiente sin materializar operación
   registerTransferControlSender(roomId, () => true)
   const disconnect = connectTransferSendCoordinator(
     roomId,
-    { acceptPreparedSenderOperation() { routeCalls += 1 } },
+    {
+      acceptPreparedSenderOperation(operation) {
+        routeCalls += 1
+        return routeSelection(operation)
+      },
+    },
     {},
     async () => undefined,
   )
