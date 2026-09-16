@@ -1,5 +1,8 @@
 import { DurableObject } from 'cloudflare:workers'
-import type { TransferControlRequest } from '../../src/shared/transferControlProtocol.ts'
+import {
+  transferControlRequestIsLive,
+  type TransferControlRequest,
+} from '../../src/shared/transferControlProtocol.ts'
 import { parseDeviceRelayInput } from './deviceRelayProtocol'
 import {
   PENDING_TRANSFER_STORAGE_KEY,
@@ -151,6 +154,7 @@ export class RealtimeHub extends DurableObject {
       const targetIsSamePerson = Boolean(target && target.attachment.personId === current.personId)
 
       if (control.message.type === 'transfer-request') {
+        if (!transferControlRequestIsLive(control.message, Date.now())) return
         if (targetIsSamePerson && target) {
           send(target.socket, {
             type: 'transfer-control',
