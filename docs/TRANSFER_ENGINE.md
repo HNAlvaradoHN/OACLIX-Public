@@ -1,11 +1,11 @@
 # Transfer Engine — OACLIX
 
 Fecha: 2026-09-16
-Estado: Paso 2 en desarrollo sobre `feat/transfer-engine`, dependiente del Paso 1 (`feat/transfer-control-plane`). Checkpoint 1 pasó CI #119; Checkpoint 2 pasó CI #120; Checkpoint 3 pasó CI #122; Checkpoint 4 pasó CI #124.
+Estado: Paso 2 en desarrollo sobre `feat/transfer-engine`, dependiente del Paso 1 (`feat/transfer-control-plane`). Checkpoint 1 pasó CI #119; Checkpoint 2 pasó CI #120; Checkpoint 3 pasó CI #122; Checkpoint 4 pasó CI #124; Checkpoint 5 está implementado y pendiente de gate CI.
 
 ## Objetivo
 
-Mover texto, imágenes y archivos con un motor independiente del transporte. El motor no decide si la ruta es LAN, WebRTC, Wi-Fi Direct, Internet directo o relay: define cómo describir, verificar, reanudar y preparar una operación antes de entregarla al Route Manager.
+Mover texto, imágenes y archivos con un motor independiente del transporte. El motor no decide por sí solo cómo implementar LAN, WebRTC, Wi-Fi Direct, Internet directo o relay: define cómo describir, verificar, reanudar y preparar una operación antes de entregarla al Route Manager.
 
 ## Experiencia ya decidida
 
@@ -91,14 +91,27 @@ Gate: CI #122 verde en tests, lint, build, auditoría pública, Web/Worker y And
 7. recién entonces `PreparedTransferRouteManager` recibe la operación;
 8. rechazo, cancelación, fallo al emitir control o expiración limpian la fuente pendiente.
 
-El checkpoint mantiene una frontera deliberada: `PreparedTransferRouteManager` recibe una operación preparada, pero todavía no decide una ruta concreta ni mueve bytes. No llama WebRTC, DataChannel, relay ni rutas legacy desde el coordinador nuevo.
-
 Gate: CI #124 verde en auditoría pública, tests, lint, build, Web/Worker y Android sobre `ce924536ac7879f552f7612fd9f5c23c6a00fcba`.
+
+## Checkpoint 5 — Route Manager → selección de ruta
+
+`src/transfer/transferRouteManager.ts` introduce una decisión explícita separada del movimiento de bytes:
+
+- `PreparedTransferRouteManager` devuelve una `TransferRouteSelection` técnica;
+- antes de seleccionar, verifica que manifest y journal sean válidos, que el journal siga en `sender/prepared` y que manifest e intent coincidan;
+- la presencia `online` por sí sola no se considera una ruta de datos;
+- `local-direct` solo es elegible cuando existe un DataChannel validado hacia el receptor;
+- el adaptador local existente solo cubre texto e imagen, por lo que archivos quedan `unavailable` aunque exista DataChannel;
+- esa restricción se aplica también si un resolver de disponibilidad defectuoso intenta declarar `localDirect: true` para archivos;
+- la selección contiene solo IDs/tipo/estado/ruta/timestamp; no incluye payload ni `sourceRef`;
+- seleccionar una ruta **no** invoca `sendLocalClipboardTextDirect`, `sendLocalImageDirect`, relay, WebSocket de payload ni ningún envío de bytes.
+
+Gate pendiente: auditoría pública, tests, lint, build, Web/Worker y Android.
 
 ## Privacidad y seguridad
 
 - ningún payload nuevo viaja por el WebSocket de control;
-- manifest, journal, `sourceRef` y Route Intent contienen únicamente metadata técnica necesaria;
+- manifest, journal, `sourceRef`, Route Intent y Route Selection contienen únicamente metadata técnica necesaria;
 - la correlación pendiente mantiene la fuente solo en memoria de la sesión hasta que se acepta, rechaza, cancela, vence o falla el envío;
 - no se introducen secrets, hostnames privados, nombres reales de archivos, rutas/URI privadas ni contenido del portapapeles en metadata técnica;
 - rige `SECURITY.md`;
@@ -111,11 +124,11 @@ Todo lo anterior es lógica y almacenamiento local. No activa R2, TURN, SFU, alm
 ## No sustituye todavía
 
 - relay legacy de texto/imágenes;
-- DataChannel de imágenes existente;
+- DataChannel de texto/imágenes existente como data plane;
 - control plane del Paso 1;
 - Android wake/background;
-- selección de ruta ni movimiento de bytes del nuevo data plane.
+- movimiento de bytes del nuevo data plane.
 
 ## Siguiente checkpoint exacto
 
-Checkpoint 5: definir el contrato concreto del Route Manager para recibir una operación preparada, evaluar únicamente rutas realmente disponibles y devolver una decisión de ruta separada del movimiento de bytes. Empezar por la ruta local/directa ya existente mediante un adaptador aislado, manteniendo intacto el camino legacy hasta demostrar equivalencia, integridad y fallback seguro.
+Después de CI verde del Checkpoint 5: crear un adaptador controlado para `local-direct` que consuma chunks del Transfer Engine y use el transporte local existente, empezando por una sola superficie (texto o imagen). Mantener el camino legacy intacto hasta demostrar equivalencia, integridad y fallback seguro; recién después considerar sustitución.
