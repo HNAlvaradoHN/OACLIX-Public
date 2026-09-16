@@ -116,6 +116,33 @@ test('rejected limpia la fuente correlacionada y no entrega nada al Route Manage
   assert.equal(routeCalls, 0)
 })
 
+test('cancel del receptor limpia la fuente pendiente sin materializar operación', async () => {
+  const roomId = 'room_send_cancel_cleanup'
+  let routeCalls = 0
+  registerTransferControlSender(roomId, () => true)
+  const disconnect = connectTransferSendCoordinator(
+    roomId,
+    { acceptPreparedSenderOperation() { routeCalls += 1 } },
+    {},
+    async () => undefined,
+  )
+
+  const request = await sendTransferRequestForSource(roomId, senderDeviceId, receiverDeviceId, source())
+  publishTransferControl(roomId, {
+    version: 1,
+    type: 'transfer-cancel',
+    requestId: request.requestId,
+    senderDeviceId,
+    receiverDeviceId,
+    cancelledByDeviceId: receiverDeviceId,
+    cancelledAt: Date.now(),
+  }, receiverDeviceId)
+
+  disconnect()
+  assert.equal(hasPendingTransferSource(roomId, request.requestId), false)
+  assert.equal(routeCalls, 0)
+})
+
 test('fallo al emitir control revierte el registro local de la fuente', async () => {
   const roomId = 'room_send_control_failure'
   let requestId = ''
