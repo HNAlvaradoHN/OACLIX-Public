@@ -32,6 +32,14 @@ export function createLocalImageTransferChunkSource(item: LocalImageClipboardSna
   return createBlobTransferChunkSource(item.blob, 'image', reference)
 }
 
+export async function loadLocalTextTransferItem(
+  reference: TransferSourceReference,
+  now = Date.now(),
+): Promise<TransferableLocalClipboardText | null> {
+  if (!validTransferSourceReference(reference) || reference.provider !== 'local-text') return null
+  return (await readLocalClipboardTexts(now)).find((candidate) => candidate.id === reference.itemId) ?? null
+}
+
 export async function reopenLocalTransferChunkSource(
   reference: TransferSourceReference,
   now = Date.now(),
@@ -39,7 +47,7 @@ export async function reopenLocalTransferChunkSource(
   if (!validTransferSourceReference(reference)) return null
 
   if (reference.provider === 'local-text') {
-    const item = (await readLocalClipboardTexts(now)).find((candidate) => candidate.id === reference.itemId)
+    const item = await loadLocalTextTransferItem(reference, now)
     return item ? createLocalTextTransferChunkSource(item) : null
   }
 
