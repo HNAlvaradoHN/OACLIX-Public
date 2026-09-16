@@ -18,6 +18,11 @@ const receiverDeviceId = 'dev_bbbbbbbbbbbbbbbb'
 const requestId = 'req_0123456789abcdef01234567'
 const transferId = 'txf_0123456789abcdef0123456789abcdef'
 const createdAt = 1_800_000_000_000
+const sourceRef = {
+  version: 1 as const,
+  provider: 'local-image' as const,
+  itemId: 'itm_0123456789abcdef0123456789abcdef',
+}
 
 async function resumableState() {
   const manifest = await buildTransferManifestFromBlob(
@@ -37,13 +42,22 @@ async function resumableState() {
   return { manifest, journal, state }
 }
 
-test('snapshot durable conserva solo manifest y journal técnicos, sin payload', async () => {
+test('snapshot durable conserva solo metadata técnica, sin payload', async () => {
   const { state } = await resumableState()
   const serialized = JSON.stringify(state)
 
-  assert.deepEqual(Object.keys(state).sort(), ['journal', 'manifest', 'savedAt', 'type', 'version'])
+  assert.deepEqual(Object.keys(state).sort(), ['journal', 'manifest', 'savedAt', 'sourceRef', 'type', 'version'])
+  assert.equal(state.sourceRef, null)
   assert.doesNotMatch(serialized, /base64Data|fileName|payload|contentData|clipboardText/)
   assert.equal(await restoreTransferOperationStateSnapshot(state, createdAt + 4) !== null, true)
+})
+
+test('referencia local reabrible puede persistirse sin copiar el contenido', async () => {
+  const { manifest, journal } = await resumableState()
+  const state = await createTransferOperationStateSnapshot(manifest, journal, createdAt + 3, sourceRef)
+  const restored = await restoreTransferOperationStateSnapshot(state, createdAt + 4)
+  assert.deepEqual(restored?.sourceRef, sourceRef)
+  assert.doesNotMatch(JSON.stringify(restored), /blob|base64Data|fileName|clipboardText/)
 })
 
 test('estado inactivo expira y no se restaura indefinidamente', async () => {
@@ -66,6 +80,15 @@ test('timestamp demasiado futuro se rechaza durante restauración', async () => 
 test('metadata añadida al snapshot se rechaza para evitar persistir contenido accidental', async () => {
   const { state } = await resumableState()
   const polluted = { ...state, payload: 'no debe persistirse' }
+  assert.equal(await restoreTransferOperationStateSnapshot(polluted, createdAt + 4), null)
+})
+
+test('referencia de fuente con campos extra se rechaza', async () => {
+  const { state } = await resumableState()
+  const polluted = {
+    ...state,
+    sourceRef: { ...sourceRef, fileName: 'privado.png' },
+  }
   assert.equal(await restoreTransferOperationStateSnapshot(polluted, createdAt + 4), null)
 })
 

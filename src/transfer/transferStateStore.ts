@@ -8,6 +8,10 @@ import {
   validTransferJournal,
   type TransferJournal,
 } from './transferJournal.ts'
+import {
+  validTransferSourceReference,
+  type TransferSourceReference,
+} from './transferChunkSource.ts'
 
 const DATABASE_NAME = 'oaclix-transfer-engine'
 const DATABASE_VERSION = 1
@@ -23,6 +27,7 @@ export type TransferOperationState = {
   type: 'transfer-operation-state'
   manifest: TransferManifest
   journal: TransferJournal
+  sourceRef: TransferSourceReference | null
   savedAt: number
 }
 
@@ -42,6 +47,10 @@ function validTimestamp(value: unknown) {
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
 }
 
+function validSourceReference(value: unknown) {
+  return value === null || validTransferSourceReference(value)
+}
+
 function stateWithinRetention(state: TransferOperationState, now: number) {
   if (!validTimestamp(now)) return false
   if (state.manifest.createdAt > now + TRANSFER_STATE_CLOCK_SKEW_MS) return false
@@ -57,8 +66,13 @@ export async function restoreTransferOperationStateSnapshot(
   value: unknown,
   now = Date.now(),
 ): Promise<TransferOperationState | null> {
-  if (!isRecord(value) || !hasOnlyKeys(value, ['version', 'type', 'manifest', 'journal', 'savedAt'])) return null
-  if (value.version !== 1 || value.type !== 'transfer-operation-state' || !validTimestamp(value.savedAt)) return null
+  if (!isRecord(value) || !hasOnlyKeys(value, ['version', 'type', 'manifest', 'journal', 'sourceRef', 'savedAt'])) return null
+  if (
+    value.version !== 1
+    || value.type !== 'transfer-operation-state'
+    || !validTimestamp(value.savedAt)
+    || !validSourceReference(value.sourceRef)
+  ) return null
   if (!validTransferManifestShape(value.manifest) || !(await verifyTransferManifest(value.manifest))) return null
   if (!validTransferJournal(value.journal, value.manifest) || !transferJournalCanResume(value.journal, value.manifest)) return null
 
@@ -67,6 +81,7 @@ export async function restoreTransferOperationStateSnapshot(
     type: 'transfer-operation-state',
     manifest: value.manifest,
     journal: value.journal,
+    sourceRef: value.sourceRef === null ? null : { ...value.sourceRef },
     savedAt: Number(value.savedAt),
   }
   return stateWithinRetention(state, now) ? state : null
@@ -76,8 +91,10 @@ export async function createTransferOperationStateSnapshot(
   manifest: TransferManifest,
   journal: TransferJournal,
   now = Date.now(),
+  sourceRef: TransferSourceReference | null = null,
 ): Promise<TransferOperationState> {
   if (!validTimestamp(now)) throw new Error('Timestamp de estado inválido')
+  if (!validSourceReference(sourceRef)) throw new Error('Referencia de fuente inválida')
   if (!validTransferManifestShape(manifest) || !(await verifyTransferManifest(manifest))) {
     throw new Error('Manifest de transferencia inválido')
   }
@@ -93,6 +110,7 @@ export async function createTransferOperationStateSnapshot(
     type: 'transfer-operation-state',
     manifest,
     journal,
+    sourceRef: sourceRef ? { ...sourceRef } : null,
     savedAt: now,
   }
 }
@@ -154,8 +172,9 @@ export async function saveTransferOperationState(
   manifest: TransferManifest,
   journal: TransferJournal,
   now = Date.now(),
+  sourceRef: TransferSourceReference | null = null,
 ) {
-  const state = await createTransferOperationStateSnapshot(manifest, journal, now)
+  const state = await createTransferOperationStateSnapshot(manifest, journal, now, sourceRef)
   return enqueueMutation(async () => {
     await writeState(state)
     return state
