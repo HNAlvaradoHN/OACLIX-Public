@@ -1,4 +1,5 @@
 import {
+  transferControlRequestIsLive,
   validTransferControlMessage,
   type TransferControlRequest,
 } from '../../src/shared/transferControlProtocol.ts'
@@ -32,7 +33,7 @@ export function normalizePendingTransferRequests(value: unknown, now: number) {
   if (!Array.isArray(value)) return [] as PendingTransferRequestRecord[]
   return value
     .filter(isPendingRecord)
-    .filter((record) => record.message.expiresAt > now)
+    .filter((record) => transferControlRequestIsLive(record.message, now))
     .slice(0, MAX_PENDING_TRANSFER_REQUESTS_PER_ROOM)
 }
 
@@ -42,7 +43,7 @@ export function queuePendingTransferRequest(
   now: number,
 ) {
   const pending = normalizePendingTransferRequests(current, now)
-  if (!isPendingRecord(record) || record.message.expiresAt <= now) {
+  if (!isPendingRecord(record) || !transferControlRequestIsLive(record.message, now)) {
     return { accepted: false, pending }
   }
 
