@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { createAutomaticTrustedTransferDecision } from '../src/realtime/transferAcceptancePolicy.ts'
 import {
   observeReceivedTransferControlForRouteIntent,
   subscribeTransferRouteIntent,
@@ -50,6 +51,43 @@ test('accepted produce solo una intención de ruta y todavía no elige transport
   assert.equal(Object.hasOwn(intent, 'payload'), false)
   assert.deepEqual(received, [intent])
 
+  unsubscribe()
+})
+
+test('dispositivo propio autoaceptado desemboca en un único route-intent sin bytes', () => {
+  const roomId = 'room-route-intent-autoaccept'
+  const original = request('req_100000000000000000000007')
+  const received: unknown[] = []
+  const unsubscribe = subscribeTransferRouteIntent(roomId, (intent) => received.push(intent))
+
+  assert.equal(trackSentTransferControl(roomId, receiverDeviceId, original), true)
+  const decision = createAutomaticTrustedTransferDecision(original, {
+    localDeviceId: receiverDeviceId,
+    remoteDeviceId: senderDeviceId,
+    trustedSameIdentity: true,
+    decidedAt: now + 500,
+  })
+  assert.ok(decision)
+
+  const intent = observeReceivedTransferControlForRouteIntent(
+    roomId,
+    receiverDeviceId,
+    decision,
+    now + 1_000,
+  )
+  assert.ok(intent)
+  assert.equal(received.length, 1)
+  assert.equal(intent.requestId, original.requestId)
+  assert.equal(Object.hasOwn(intent, 'payload'), false)
+  assert.equal(Object.hasOwn(intent, 'transport'), false)
+
+  assert.equal(observeReceivedTransferControlForRouteIntent(
+    roomId,
+    receiverDeviceId,
+    decision,
+    now + 1_500,
+  ), null)
+  assert.equal(received.length, 1)
   unsubscribe()
 })
 
