@@ -1,11 +1,11 @@
 # Transfer Engine — OACLIX
 
 Fecha: 2026-09-16
-Estado: Paso 2 en desarrollo sobre `feat/transfer-engine`, dependiente del Paso 1 (`feat/transfer-control-plane`). Checkpoint 1 pasó CI #119; Checkpoint 2 pasó CI #120; Checkpoint 3 está implementado y pendiente de gate CI.
+Estado: Paso 2 en desarrollo sobre `feat/transfer-engine`, dependiente del Paso 1 (`feat/transfer-control-plane`). Checkpoint 1 pasó CI #119; Checkpoint 2 pasó CI #120; Checkpoint 3 pasó CI #122.
 
 ## Objetivo
 
-Mover texto, imágenes y archivos con un motor independiente del transporte. El motor no decide si la ruta es LAN, WebRTC, Wi-Fi Direct, Internet directo o relay: define cómo describir, verificar, reanudar y preparar una operación antes de entregar el trabajo al futuro Route Manager.
+Mover texto, imágenes y archivos con un motor independiente del transporte. El motor no decide si la ruta es LAN, WebRTC, Wi-Fi Direct, Internet directo o relay: define cómo describir, verificar, reanudar y preparar una operación antes de entregarla al futuro Route Manager.
 
 ## Experiencia ya decidida
 
@@ -41,7 +41,7 @@ Gate: CI #119 verde en tests, lint, build, auditoría pública, Web/Worker y And
 
 Gate: CI #120 verde en Web/Worker y Android.
 
-## Checkpoint 3 — Route Intent → operación preparada
+## Checkpoint 3 — Route Intent → operación preparada ✅
 
 ### Fuente de chunks
 
@@ -72,11 +72,11 @@ Gate: CI #120 verde en Web/Worker y Android.
 7. persiste manifest/journal y, cuando existe, solo la referencia local técnica;
 8. recién después publica la operación preparada al siguiente componente.
 
+`sourceRef` queda ligado al tipo real del manifest (`local-text`→`text`, `local-image`→`image`) para impedir restauraciones ambiguas o manipuladas.
+
 **Este checkpoint todavía no elige transporte ni envía bytes.** `accepted` sigue significando “autorizado para preparar”, no “transferencia iniciada”.
 
-### Evolución del snapshot durable
-
-El snapshot reanudable añade `sourceRef`, que debe ser `null` o una referencia local validada con esquema cerrado. Esto permite que texto/imágenes ya almacenados por OACLIX puedan volver a localizar su origen tras reinicio sin duplicar contenido dentro del journal. Estados antiguos de desarrollo que no cumplan el esquema se depuran de forma segura.
+Gate: CI #122 verde en tests, lint, build, auditoría pública, Web/Worker y Android sobre `f95db68a6580b86abe2a9ec6653df565507e20f9`.
 
 ## Privacidad y seguridad
 
@@ -98,16 +98,6 @@ Todo lo anterior es lógica y almacenamiento local. No activa R2, TURN, SFU, alm
 - Android wake/background;
 - selección de ruta.
 
-## Gate del Checkpoint 3
-
-Debe quedar demostrado que:
-
-1. Route Intent válido produce manifest + journal sender y persiste metadata antes de transporte;
-2. tipo/tamaño distintos o intent vencido fallan cerrado;
-3. `sourceRef` no puede contener campos extra o contenido;
-4. texto e imagen locales producen referencias reabribles sin duplicar payload;
-5. Web/Worker, tests, lint, build, auditoría pública y Android siguen verdes.
-
 ## Siguiente checkpoint exacto
 
-Después de CI verde, conectar esta preparación al flujo real de envío: registrar la fuente **antes** de emitir `transfer-request`, correlacionarla por `requestId`, recuperar la fuente tras autoaceptación y entregar la operación preparada a una interfaz mínima del Route Manager. Todavía sin retirar rutas legacy hasta tener sustituto probado.
+Checkpoint 4: registrar la fuente antes de emitir `transfer-request`, correlacionarla por `requestId`, recuperarla tras autoaceptación y entregar la operación preparada a una interfaz mínima del Route Manager. Durante este checkpoint el flujo nuevo debe permanecer en migración controlada: no retirar ni sustituir las rutas legacy que todavía entregan los bytes hasta que el nuevo data plane tenga un reemplazo probado.
