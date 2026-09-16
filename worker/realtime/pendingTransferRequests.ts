@@ -100,13 +100,12 @@ export function pendingTransferRequestsForDevice(
 
 export function removePendingTransferRequestsForDevice(
   current: PendingTransferRequestRecord[],
-  personId: string,
   deviceId: string,
   now: number,
 ) {
-  return normalizePendingTransferRequests(current, now).filter((record) => !(
-    record.personId === personId
-    && (record.message.senderDeviceId === deviceId || record.message.receiverDeviceId === deviceId)
+  return normalizePendingTransferRequests(current, now).filter((record) => (
+    record.message.senderDeviceId !== deviceId
+    && record.message.receiverDeviceId !== deviceId
   ))
 }
 
