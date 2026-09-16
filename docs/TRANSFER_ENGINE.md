@@ -1,7 +1,7 @@
 # Transfer Engine — OACLIX
 
 Fecha: 2026-09-16
-Estado: Paso 2 en desarrollo sobre `feat/transfer-engine`, dependiente del Paso 1 (`feat/transfer-control-plane`). Checkpoints 1–9 pasaron CI #119, #120, #122, #124, #126, #130, #132, #134 y #140.
+Estado: Paso 2 en desarrollo sobre `feat/transfer-engine`, dependiente del Paso 1 (`feat/transfer-control-plane`). Checkpoints 1–10 pasaron CI #119, #120, #122, #124, #126, #130, #132, #134, #140/#141 y #142.
 
 ## Objetivo
 
@@ -53,8 +53,6 @@ Gate: CI #126 verde sobre `c1419c61d4b1461dbf2e16528d79cb780b2c9c50`.
 6. solo tras ese ACK marca los chunks completados, completa el journal en memoria y elimina el estado reanudable;
 7. si el contenido cambió, falta el item o Directo falla, no adelanta el journal ni borra el estado reanudable.
 
-Este adaptador todavía no sustituye el envío legacy en la UI/producto. Se mantiene aislado hasta demostrar equivalencia e integridad end-to-end.
-
 Gate: CI #130 verde en auditoría, tests, lint, build, Web/Worker y Android sobre `92ca2c11d2a93b159d846f4f12214dcfc1480031`.
 
 ## Checkpoint 7 — adaptador `local-direct` de imagen ✅
@@ -69,8 +67,6 @@ Gate: CI #130 verde en auditoría, tests, lint, build, Web/Worker y Android sobr
 6. solo tras éxito del transporte completa chunks/journal y elimina el estado reanudable;
 7. imagen ausente, vencida, alterada o fallo/ACK ausente dejan el journal `prepared`, sin progreso falso ni borrado del estado.
 
-El adaptador permanece aislado: no sustituye rutas legacy, no agrega relay ni mueve payload por WebSocket.
-
 Gate: CI #132 verde en auditoría, tests, lint, build, Web/Worker y Android sobre `699b1ff5ec342b60018a1465572ff06b7c6c5d50`.
 
 ## Checkpoint 8 — dispatcher del data plane ✅
@@ -83,15 +79,13 @@ Gate: CI #132 verde en auditoría, tests, lint, build, Web/Worker y Android sobr
 4. `unavailable`, archivo o combinaciones no soportadas se rechazan antes de invocar un adaptador;
 5. el dispatcher no llama WebSocket, relay, RTCDataChannel ni transportes legacy directamente;
 6. `createTransferDataPlaneHandoff` expone un callback reutilizable para `TransferSendCoordinator`;
-7. `TransferSendCoordinator` ahora espera `onHandoff` asíncrono y propaga sus fallos reales a `onError`, evitando errores silenciosos del data plane.
-
-El dispatcher sigue aislado del producto: `App.tsx` todavía usa directamente los transportes legacy para los botones de envío local.
+7. `TransferSendCoordinator` espera `onHandoff` asíncrono y propaga sus fallos reales a `onError`.
 
 Gate: CI #134 verde en auditoría, tests, lint, build, Web/Worker y Android sobre `79b8d04bf03714903ae6af68edf9ba9fe2cf193d`.
 
 ## Checkpoint 9 — frontera de envío de producto local ✅
 
-`src/transfer/localTransferProductBoundary.ts` crea la frontera aislada que une el producto con el pipeline ya validado, sin sustituir todavía los callbacks de `App.tsx`:
+`src/transfer/localTransferProductBoundary.ts` crea la frontera aislada que une el producto con el pipeline ya validado:
 
 1. mantiene por sala un `TransferSendCoordinator`, `PreparedTransferRouteManager` y handoff del dispatcher;
 2. instala la espera correlacionada por `requestId` después de registrar la fuente técnica y antes de emitir `transfer-request`, evitando respuestas síncronas perdidas;
@@ -104,7 +98,24 @@ Gate: CI #134 verde en auditoría, tests, lint, build, Web/Worker y Android sobr
 
 `TransferSendCoordinator` expone además el momento seguro de registro de la solicitud y operaciones explícitas de descarte/limpieza para que esta frontera pueda evitar carreras sin duplicar payload.
 
-Gate de implementación: CI #140 verde en auditoría, 430/430 tests, lint, build, Web/Worker y Android sobre `093ece3ba238bc8479c8633eff94f2f666231287`.
+Gate de implementación: CI #140 verde en auditoría, 430/430 tests, lint, build, Web/Worker y Android sobre `093ece3ba238bc8479c8633eff94f2f666231287`. Cierre documental: CI #141 verde sobre `2d6a7b57a10588d71196c957161e1941f6ee41de`.
+
+## Checkpoint 10 — texto local integrado al producto ✅
+
+`App.tsx` ya dejó de invocar directamente el transporte legacy para el botón de envío de texto local:
+
+1. crea el `TransferChunkSource` mediante `createLocalTextTransferChunkSource`, conservando en metadata solo el `itemId` técnico;
+2. mantiene una única `createLocalTransferProductBoundary` ligada al `generalRoomId` activo;
+3. guarda junto a la frontera el `roomId` y rechaza el envío si la referencia pertenece a otra sala, evitando carreras durante un cambio de identidad/sala;
+4. llama `sendLocalSource(identity.deviceId, dispositivoDestino, source)` y deja que request → aceptación → Route Manager → dispatcher → adaptador controlen el flujo;
+5. el mensaje visible de éxito solo se muestra después de que la `Promise` de la frontera termine, por lo que conserva la semántica de confirmación real del adaptador;
+6. al cambiar/desmontar la sala se ejecuta `disconnect()`, limpiando sus esperas y referencias técnicas pendientes;
+7. `App.tsx` ya no importa `sendLocalClipboardTextDirect`; ese transporte permanece encapsulado detrás del adaptador del Transfer Engine;
+8. el callback de imagen permanece deliberadamente en `sendLocalImageDirect`, sin mezclar dos migraciones en el mismo checkpoint.
+
+Una prueba de wiring bloquea que texto vuelva a saltarse la frontera, exige correlación con la sala actual y confirma que imagen sigue legacy hasta su propio checkpoint.
+
+Gate: CI #142 verde en tests, lint, build, Web/Worker y Android sobre `ef7eb59bb6b529915f49623edc990f421d6dac02`.
 
 ## Privacidad, seguridad y costo
 
@@ -116,11 +127,11 @@ Gate de implementación: CI #140 verde en auditoría, 430/430 tests, lint, build
 
 ## No sustituye todavía
 
-- callbacks legacy de texto/imágenes en `App.tsx`;
+- callback legacy de imagen local en `App.tsx`;
 - transferencia de archivos por el nuevo data plane;
 - Android wake/background;
 - fallback remoto del nuevo data plane.
 
 ## Siguiente checkpoint exacto
 
-Checkpoint 10: integrar primero **solo el envío local de texto** de `App.tsx` con la nueva frontera de producto. El callback actual `sendLocalTextDirect` debe dejar de llamar directamente a `sendLocalClipboardTextDirect`: debe crear la fuente con `createLocalTextTransferChunkSource`, reutilizar una `createLocalTransferProductBoundary` ligada a la sala activa y llamar `sendLocalSource` con `identity.deviceId` y el dispositivo destino. La frontera debe destruirse al cambiar/desmontar la sala, el éxito visible debe ocurrir solo cuando su `Promise` termine y los errores deben seguir llegando a la UI. En este checkpoint no se modifica todavía el callback legacy de imagen, General, archivos, wake/background ni fallback remoto. Después de validar texto de producto end-to-end se migrará imagen por separado.
+Checkpoint 11: migrar **solo el envío local de imagen** de `App.tsx` a la misma frontera de producto ya ligada a la sala. El callback `sendLocalImageToDirect` debe dejar de llamar directamente a `sendLocalImageDirect`, crear la fuente mediante `createLocalImageTransferChunkSource(localImageShareItem)` y llamar `sendLocalSource(identity.deviceId, dispositivoDestino, source)`. Debe reutilizar `localTransferBoundaryRef`, conservar la validación de que la imagen seleccionada siga disponible y mostrar éxito únicamente al completar la `Promise`. En este checkpoint no se agregan archivos, wake/background, fallback remoto ni cambios de General.
