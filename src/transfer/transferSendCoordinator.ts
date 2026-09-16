@@ -34,7 +34,10 @@ type PendingTransferSource = {
 }
 
 export type TransferSendCoordinatorHandlers = {
-  onHandoff?(operation: PreparedSenderTransferOperation, selection: TransferRouteSelection): void
+  onHandoff?(
+    operation: PreparedSenderTransferOperation,
+    selection: TransferRouteSelection,
+  ): void | Promise<void>
   onUnavailable?(intent: TransferRouteIntent): void
   onError?(intent: TransferRouteIntent, error: unknown): void
 }
@@ -175,7 +178,9 @@ export function connectTransferSendCoordinator(
   const routeHandlers: TransferEngineRouteHandlers = {
     onPrepared(operation) {
       void Promise.resolve(routeManager.acceptPreparedSenderOperation(operation))
-        .then((selection) => handlers.onHandoff?.(operation, selection))
+        .then(async (selection) => {
+          await handlers.onHandoff?.(operation, selection)
+        })
         .catch((error) => handlers.onError?.(operation.intent, error))
     },
     onUnavailable: handlers.onUnavailable,
