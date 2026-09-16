@@ -39,6 +39,7 @@ export type TransferControlMessage =
   | TransferControlCancel
 
 export const TRANSFER_REQUEST_MAX_TTL_MS = 5 * 60_000
+export const TRANSFER_REQUEST_MAX_CLOCK_SKEW_MS = 60_000
 export const TRANSFER_CONTROL_MAX_SERIALIZED_LENGTH = 2_048
 
 const DEVICE_ID_PATTERN = /^dev_[A-Za-z0-9_-]{16,64}$/
@@ -149,6 +150,13 @@ export function validTransferControlMessage(value: unknown): value is TransferCo
   if (value.type === 'transfer-decision') return validDecision(value)
   if (value.type === 'transfer-cancel') return validCancel(value)
   return false
+}
+
+export function transferControlRequestIsLive(value: TransferControlRequest, now: number) {
+  if (!Number.isSafeInteger(now) || now <= 0) return false
+  return value.expiresAt > now
+    && value.createdAt <= now + TRANSFER_REQUEST_MAX_CLOCK_SKEW_MS
+    && value.expiresAt <= now + TRANSFER_REQUEST_MAX_TTL_MS + TRANSFER_REQUEST_MAX_CLOCK_SKEW_MS
 }
 
 export function validTransferControlForRoute(
