@@ -33,6 +33,10 @@ type PendingTransferSource = {
   source: TransferChunkSource
 }
 
+export type TransferRequestRegistrationObserver = (
+  request: TransferControlRequest,
+) => void
+
 export type TransferSendCoordinatorHandlers = {
   onHandoff?(
     operation: PreparedSenderTransferOperation,
@@ -135,12 +139,21 @@ export function hasPendingTransferSource(roomId: string, requestId: string, now 
   return pendingSourcesByRoom.get(roomId)?.has(requestId) ?? false
 }
 
+export function discardPendingTransferSource(roomId: string, requestId: string) {
+  return removePendingSource(roomId, requestId)
+}
+
+export function clearPendingTransferSources(roomId: string) {
+  return pendingSourcesByRoom.delete(roomId)
+}
+
 export async function sendTransferRequestForSource(
   roomId: string,
   senderDeviceId: string,
   receiverDeviceId: string,
   source: TransferChunkSource,
   now = Date.now(),
+  onRegistered?: TransferRequestRegistrationObserver,
 ) {
   const blob = await openTransferChunkSource(source)
   const request: TransferControlRequest = {
@@ -162,6 +175,13 @@ export async function sendTransferRequestForSource(
   if (sources.has(request.requestId)) throw new Error('Colisión de solicitud de transferencia')
 
   sources.set(request.requestId, { request, source })
+  try {
+    onRegistered?.({ ...request })
+  } catch (error) {
+    removePendingSource(roomId, request.requestId)
+    throw error
+  }
+
   if (!sendTransferControl(roomId, receiverDeviceId, request)) {
     removePendingSource(roomId, request.requestId)
     throw new Error('No se pudo enviar la solicitud de transferencia')
