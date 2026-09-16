@@ -82,7 +82,7 @@ test('un receptor no puede acumular más de la cuota corta definida', () => {
   assert.equal(overflow.pending.length, MAX_PENDING_TRANSFER_REQUESTS_PER_DEVICE)
 })
 
-test('entrega, resolución, unlink y alarma operan solo sobre metadatos pendientes', () => {
+test('resolución exige la misma identidad y unlink limpia por identidad de dispositivo', () => {
   const first = pendingRecord(1)
   const second = pendingRecord(2)
   const pending = [first, second]
@@ -90,8 +90,19 @@ test('entrega, resolución, unlink y alarma operan solo sobre metadatos pendient
   assert.deepEqual(pendingTransferRequestsForDevice(pending, personId, receiverDeviceId, now), pending)
   assert.equal(nextPendingTransferExpiry(pending, now), first.message.expiresAt)
 
+  const wrongPerson = removePendingTransferRequest(
+    pending,
+    'per_bbbbbbbbbbbbbbbb',
+    first.message.requestId,
+    senderDeviceId,
+    receiverDeviceId,
+    now,
+  )
+  assert.deepEqual(wrongPerson, pending)
+
   const resolved = removePendingTransferRequest(
     pending,
+    personId,
     first.message.requestId,
     senderDeviceId,
     receiverDeviceId,
