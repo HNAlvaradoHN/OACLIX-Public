@@ -1,6 +1,7 @@
 import type { TransferControlMessage } from '../shared/transferControlProtocol'
 import { applyTransferControlAvailability } from './deviceAvailability.ts'
 import {
+  listRetryableTrackedTransferRequests,
   observeReceivedTransferControlForRouteIntent,
   trackSentTransferControl,
 } from './transferRouteIntent.ts'
@@ -26,6 +27,14 @@ export function sendTransferControl(
     trackSentTransferControl(roomId, targetDeviceId, message)
   }
   return sent
+}
+
+export function retryTrackedTransferRequests(roomId: string, now = Date.now()) {
+  let retried = 0
+  for (const request of listRetryableTrackedTransferRequests(roomId, now)) {
+    if (sendTransferControl(roomId, request.receiverDeviceId, request)) retried += 1
+  }
+  return retried
 }
 
 export function subscribeTransferControl(
