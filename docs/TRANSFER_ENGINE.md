@@ -7,6 +7,10 @@ Estado: Paso 2 en desarrollo sobre `feat/transfer-engine`, dependiente del Paso 
 
 Mover texto, imágenes y archivos con un motor independiente del transporte. El motor no decide si la ruta es LAN, WebRTC, Wi-Fi Direct, Internet directo o relay: solo define cómo describir, verificar, reanudar y cerrar una transferencia.
 
+## Dependencia de experiencia ya decidida
+
+El Transfer Engine debe respetar el requisito fijado en el Paso 1: un dispositivo propio ya vinculado/confiable recibe sin pedir confirmación manual por cada transferencia. Que la app receptora esté cerrada tampoco debe cambiar esa experiencia; la etapa de Android wake despertará el receptor de forma ligera y temporal. Por eso este motor se diseña desde ahora para poder reanudar desde journal después de interrupciones y no depende de mantener WebRTC u otro transporte pesado activo permanentemente.
+
 ## Checkpoint 1 — manifest, chunks, hashes y journal
 
 ### Manifest
