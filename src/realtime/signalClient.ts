@@ -1,4 +1,8 @@
 import { signDeviceAction } from '../identity/deviceIdentity'
+import {
+  validTransferControlForRoute,
+  type TransferControlMessage,
+} from '../shared/transferControlProtocol'
 import { receiveLocalClipboardRelayTransfer } from '../transport/localClipboardRelayReceiver'
 import { receiveLocalImageRelayTransfer } from '../transport/localImageRelayReceiver'
 import { publishCloudConnectivity, publishCloudSyncHint } from './cloudSyncHintBus'
@@ -26,6 +30,10 @@ import {
   heartbeatIdleDelay,
   type HeartbeatPhase,
 } from './heartbeatPolicy'
+import {
+  publishTransferControl,
+  registerTransferControlSender,
+} from './transferControlBus'
 
 export type RealtimeSignal =
   | {
@@ -51,6 +59,7 @@ type SignalClientHandlers = {
   onPresence?(peers: RealtimePresencePeer[]): void
   onSignal?(fromDeviceId: string, fromSessionId: string, signal: RealtimeSignal): void
   onCloudChange?(fromDeviceId: string): void
+  onTransferControl?(fromDeviceId: string, message: TransferControlMessage): void
   onDeviceTransfer?(fromDeviceId: string, transfer: LocalClipboardTransfer): void
   onDeviceTransferAck?(fromDeviceId: string, ack: LocalClipboardTransferAck): void
   onDeviceImageTransfer?(fromDeviceId: string, transfer: LocalImageTransfer): void
@@ -63,6 +72,7 @@ type ServerMessage =
   | { type: 'presence'; deviceIds: string[]; peers?: RealtimePresencePeer[] }
   | { type: 'signal'; fromDeviceId: string; fromSessionId: string; signal: RealtimeSignal }
   | { type: 'cloud-change'; fromDeviceId: string }
+  | { type: 'transfer-control'; fromDeviceId: string; message: TransferControlMessage }
   | { type: 'device-transfer'; fromDeviceId: string; transfer: LocalClipboardTransfer }
   | { type: 'device-transfer-ack'; fromDeviceId: string; ack: LocalClipboardTransferAck }
   | { type: 'device-image-transfer'; fromDeviceId: string; transfer: LocalImageTransfer }
@@ -139,6 +149,7 @@ export class RealtimeSignalClient {
     registerDeviceRelaySender(roomId, (targetDeviceId, transfer) => this.sendDeviceTransfer(targetDeviceId, transfer))
     registerDeviceRelayAckSender(roomId, (targetDeviceId, ack) => this.sendDeviceTransferAck(targetDeviceId, ack))
     registerDeviceImageRelayAckSender(roomId, (targetDeviceId, ack) => this.sendDeviceImageTransferAck(targetDeviceId, ack))
+    registerTransferControlSender(roomId, (targetDeviceId, message) => this.sendTransferControlMessage(targetDeviceId, message))
   }
 
   connect() {
@@ -161,6 +172,16 @@ export class RealtimeSignalClient {
       return false
     }
     this.socket.send(JSON.stringify({ type: 'signal', targetDeviceId, signal }))
+    return true
+  }
+
+  sendTransferControlMessage(targetDeviceId: string, message: TransferControlMessage) {
+    if (
+      !this.readyDeviceId
+      || this.socket?.readyState !== WebSocket.OPEN
+      || !validTransferControlForRoute(message, this.readyDeviceId, targetDeviceId)
+    ) return false
+    this.socket.send(JSON.stringify({ type: 'transfer-control', targetDeviceId, message }))
     return true
   }
 
@@ -372,6 +393,17 @@ export class RealtimeSignalClient {
 
         if (message.type === 'cloud-change' && DEVICE_ID_PATTERN.test(message.fromDeviceId)) {
           this.handlers.onCloudChange?.(message.fromDeviceId)
+          return
+        }
+
+        if (
+          message.type === 'transfer-control'
+          && this.readyDeviceId
+          && DEVICE_ID_PATTERN.test(message.fromDeviceId)
+          && validTransferControlForRoute(message.message, message.fromDeviceId, this.readyDeviceId)
+        ) {
+          publishTransferControl(this.roomId, message.message, message.fromDeviceId)
+          this.handlers.onTransferControl?.(message.fromDeviceId, message.message)
           return
         }
 
