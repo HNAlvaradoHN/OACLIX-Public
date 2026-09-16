@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import { createAutomaticTrustedTransferDecision } from '../src/realtime/transferAcceptancePolicy.ts'
 
@@ -48,4 +49,12 @@ test('un peer no confiable o con identidad invertida nunca se autoacepta', () =>
     trustedSameIdentity: true,
     decidedAt: now + 500,
   }), null)
+})
+
+test('SignalClient autoacepta solo después de validar el frame autenticado de control', async () => {
+  const source = await readFile(new URL('../src/realtime/signalClient.ts', import.meta.url), 'utf8')
+  assert.match(
+    source,
+    /validTransferControlForRoute\(message\.message, message\.fromDeviceId, this\.readyDeviceId\)[\s\S]*?publishTransferControl\(this\.roomId, message\.message, message\.fromDeviceId\)[\s\S]*?message\.message\.type === 'transfer-request'[\s\S]*?createAutomaticTrustedTransferDecision[\s\S]*?trustedSameIdentity: true[\s\S]*?sendTransferControl\(this\.roomId, message\.fromDeviceId, decision\)/,
+  )
 })
