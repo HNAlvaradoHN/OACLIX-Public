@@ -37,9 +37,10 @@ test('solo transfer-request puede quedar pendiente y se entrega al reconectar', 
   assert.match(source, /this\.ctx\.storage\.deleteAlarm\(\)/)
 })
 
-test('resolver o desvincular limpia solicitudes pendientes', async () => {
+test('resolver o desvincular limpia solicitudes pendientes con aislamiento', async () => {
   const source = await read('worker/realtime/realtimeHub.ts')
 
-  assert.match(source, /await this\.resolvePendingTransferRequest\(control\.message, Date\.now\(\)\)/)
+  assert.match(source, /await this\.resolvePendingTransferRequest\(current\.personId, control\.message, Date\.now\(\)\)/)
+  assert.match(source, /removePendingTransferRequest\([\s\S]*?pending,[\s\S]*?personId,/)
   assert.match(source, /removePendingTransferRequestsForDevice\(pending, deviceId, now\)/)
 })
