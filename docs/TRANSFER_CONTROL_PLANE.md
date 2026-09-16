@@ -1,11 +1,24 @@
 # Plano de control de transferencias — OACLIX
 
 Fecha: 2026-09-15
-Estado: Paso 1 en desarrollo; control online, solicitud offline y modelo de disponibilidad separados implementados en `feat/transfer-control-plane`. PR en draft hasta CI y validación integrada.
+Estado: Paso 1 en desarrollo; control online, solicitud offline, disponibilidad separada y handoff `accepted -> Route Intent` implementados en `feat/transfer-control-plane`. PR en draft hasta CI y validación integrada.
 
 ## Objetivo
 
-Separar la coordinación de una transferencia de los bytes reales. Cloudflare puede coordinar quién quiere enviar, quién recibe y si acepta, pero este canal no debe transportar texto, imagen ni archivo como payload.
+Separar la coordinación de una transferencia de los bytes reales. Cloudflare puede coordinar quién quiere enviar, quién recibe y el estado de la solicitud, pero este canal no debe transportar texto, imagen ni archivo como payload.
+
+## Requisito de experiencia — dispositivos propios confiables
+
+OACLIX debe permitir enviar a un dispositivo propio ya vinculado sin pedir confirmación manual en el receptor, siguiendo la experiencia útil observada en Blip:
+
+- un dispositivo que ya pertenece a la misma identidad confiable autoacepta la solicitud;
+- `transfer-decision: accepted` sigue existiendo como señal interna, no como diálogo obligatorio para el usuario;
+- la aprobación manual pertenece al proceso de vinculación/confianza de un dispositivo nuevo o no confiable, no a cada transferencia;
+- que la app receptora esté cerrada no cambia este requisito: una etapa posterior de Android debe despertar de forma ligera el receptor, procesar la solicitud y levantar el transporte solo durante la transferencia;
+- autoaceptar no significa mantener WebRTC ni otro transporte pesado vivo permanentemente;
+- ningún flujo puede autoaceptar un peer que no haya sido autenticado como perteneciente a la misma identidad confiable.
+
+`transferAcceptancePolicy.ts` deja fijada esta frontera: solo un contexto autenticado y marcado como misma identidad confiable puede producir automáticamente `accepted`. El wake de app cerrada todavía no se implementa en este checkpoint.
 
 ## Checkpoint 1 — control online
 
@@ -54,6 +67,20 @@ Reglas:
 
 Este checkpoint cambia el modelo interno, no la UX ni el transporte de datos existente.
 
+## Checkpoint 4 — `accepted` produce Route Intent, no una transferencia
+
+`transferRouteIntent.ts` introduce el handoff mínimo hacia el futuro Route Manager:
+
+- cuando una `transfer-request` sale correctamente, se conserva únicamente su metadata de control en memoria del emisor;
+- un `transfer-decision: accepted` válido del receptor puede producir un `route-intent`;
+- el intent conserva `requestId`, emisor, receptor, tipo general, tamaño y vigencia, pero no contiene payload ni elige transporte;
+- `rejected`, `busy`, cancelación o solicitud vencida cierran el control sin producir intent;
+- una respuesta de otro dispositivo no puede consumir la solicitud rastreada;
+- si el emisor reinició/perdió su solicitud local o ya está fuera de vigencia, un `accepted` no produce intent: OACLIX no finge que la transferencia comenzó;
+- el futuro Route Manager se conectará mediante `subscribeTransferRouteIntent()` y decidirá LAN/WebRTC/Wi-Fi Direct/remoto según disponibilidad real.
+
+Este comportamiento resuelve la regla del caso emisor offline a nivel de estado: `accepted` por sí solo nunca equivale a “transfiriendo”. Si el emisor ya no conserva una solicitud viva, debe reintentar/recrear control cuando vuelva a estar disponible; los bytes no se mueven en este checkpoint.
+
 ## Privacidad
 
 El plano de control conoce solo lo necesario para coordinar: IDs técnicos, tipo general de contenido, tamaño, timestamps y estado. No debe recibir contenido del portapapeles ni datos privados. Rige además `SECURITY.md`: ningún secreto, hostname privado, endpoint interno, credencial ni contenido real de usuario puede publicarse en el repositorio.
@@ -75,11 +102,11 @@ Los límites de cola y la expiración corta existen también para evitar consumo
 
 ## Todavía pendiente dentro del Paso 1
 
-1. conectar `accepted` con una interfaz mínima para el futuro Route Manager, sin mover bytes todavía;
-2. decidir el comportamiento cuando el receptor responde y el emisor ya está offline; no se debe fingir que la transferencia comenzó;
-3. hacer una prueba integrada del flujo de control completo;
+1. conectar la política de autoaceptación confiable al flujo autenticado real sin abrir una vía de autoaceptación para peers no confiables;
+2. hacer una prueba integrada del flujo completo `request -> autoaccepted -> route-intent`, todavía sin bytes;
+3. definir el retry de control cuando el emisor desaparece antes de recibir `accepted`;
 4. retirar el relay viejo de contenido por WebSocket únicamente cuando la ruta nueva tenga sustituto probado.
 
 ## Siguiente checkpoint exacto
 
-Crear el handoff mínimo `accepted -> Route Intent`: el plano de control solo avisará que una transferencia fue aceptada y qué par de dispositivos participa. El futuro Route Manager decidirá el transporte; este checkpoint todavía no moverá contenido ni cambiará el relay viejo.
+Conectar autoaceptación únicamente después de que `RealtimeSignalClient` haya validado que el mensaje llegó por la sesión autenticada de la misma identidad. Después verificar de extremo a extremo que un dispositivo propio recibe `transfer-request`, genera `accepted` internamente y el emisor obtiene un único `route-intent`, sin seleccionar transporte ni mover contenido.
