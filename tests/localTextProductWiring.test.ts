@@ -10,6 +10,7 @@ test('App enruta texto local por la frontera del Transfer Engine y mantiene imag
   assert.match(app, /createLocalTextTransferChunkSource/)
   assert.match(app, /createLocalTransferProductBoundary/)
   assert.match(app, /localTransferBoundaryRef/)
+  assert.match(app, /currentBoundary\.roomId !== roomId/)
   assert.match(
     app,
     /boundary\.sendLocalSource\(\s*senderDeviceId,\s*deviceId,\s*createLocalTextTransferChunkSource\(item\),?\s*\)/,
