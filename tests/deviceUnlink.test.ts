@@ -30,7 +30,7 @@ test('desvincular separa la relación sin reemplazar la identidad local', async 
   assert.match(core, /DELETE FROM device_link_codes WHERE source_device_id = \?1/)
   assert.match(realtime, /device-unlink-v1/)
   assert.match(realtime, /Dispositivo desvinculado/)
-  assert.match(realtime, /private unlinkDevice\([\s\S]*this\.broadcastPresence\(\)/)
+  assert.match(realtime, /private async unlinkDevice\([\s\S]*removePendingTransferRequestsForDevice\([\s\S]*await this\.writePendingTransferRequests\([\s\S]*this\.broadcastPresence\(\)/)
 })
 
 test('la acción normal de dispositivos ya no expone revocación', async () => {
