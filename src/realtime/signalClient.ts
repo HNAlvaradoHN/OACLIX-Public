@@ -34,6 +34,7 @@ import { createAutomaticTrustedTransferDecision } from './transferAcceptancePoli
 import {
   publishTransferControl,
   registerTransferControlSender,
+  retryTrackedTransferRequests,
   sendTransferControl,
 } from './transferControlBus'
 
@@ -370,6 +371,7 @@ export class RealtimeSignalClient {
           }
           publishCloudConnectivity(this.roomId, 'online')
           publishCloudSyncHint(this.roomId)
+          retryTrackedTransferRequests(this.roomId)
           this.handlers.onReady?.(message.deviceId)
           return
         }
