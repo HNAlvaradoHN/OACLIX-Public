@@ -1,4 +1,5 @@
 import { DurableObject } from 'cloudflare:workers'
+import type { TransferControlRequest } from '../../src/shared/transferControlProtocol.ts'
 import { parseDeviceRelayInput } from './deviceRelayProtocol'
 import {
   PENDING_TRANSFER_STORAGE_KEY,
@@ -265,7 +266,7 @@ export class RealtimeHub extends DurableObject {
     if (nextExpiry != null) await this.ctx.storage.setAlarm(nextExpiry)
   }
 
-  private async queuePendingTransferRequest(current: SocketAttachment, message: Extract<ReturnType<typeof parseTransferControlInput>, { message: { type: 'transfer-request' } }>['message']) {
+  private async queuePendingTransferRequest(current: SocketAttachment, message: TransferControlRequest) {
     const now = Date.now()
     const pending = await this.readPendingTransferRequests(now)
     const queued = queuePendingTransferRequest(pending, {
