@@ -1,7 +1,7 @@
 # Transfer Engine — OACLIX
 
 Fecha: 2026-09-16
-Estado: Paso 2 en desarrollo sobre `feat/transfer-engine`, dependiente del Paso 1 (`feat/transfer-control-plane`). Checkpoints 1–8 pasaron CI #119, #120, #122, #124, #126, #130, #132 y #134.
+Estado: Paso 2 en desarrollo sobre `feat/transfer-engine`, dependiente del Paso 1 (`feat/transfer-control-plane`). Checkpoints 1–9 pasaron CI #119, #120, #122, #124, #126, #130, #132, #134 y #140.
 
 ## Objetivo
 
@@ -89,6 +89,23 @@ El dispatcher sigue aislado del producto: `App.tsx` todavía usa directamente lo
 
 Gate: CI #134 verde en auditoría, tests, lint, build, Web/Worker y Android sobre `79b8d04bf03714903ae6af68edf9ba9fe2cf193d`.
 
+## Checkpoint 9 — frontera de envío de producto local ✅
+
+`src/transfer/localTransferProductBoundary.ts` crea la frontera aislada que une el producto con el pipeline ya validado, sin sustituir todavía los callbacks de `App.tsx`:
+
+1. mantiene por sala un `TransferSendCoordinator`, `PreparedTransferRouteManager` y handoff del dispatcher;
+2. instala la espera correlacionada por `requestId` después de registrar la fuente técnica y antes de emitir `transfer-request`, evitando respuestas síncronas perdidas;
+3. valida que request, Route Intent, operación preparada y manifest coincidan en emisor, receptor, tipo, tamaño y vigencia;
+4. la `Promise` del producto solo resuelve después de que el handoff del data plane termine realmente; no confunde `accepted` con transferencia completada;
+5. `rejected`, `busy`, cancelación remota, `unavailable` y errores del pipeline rechazan la espera correspondiente;
+6. expiración o desconexión limpian la fuente técnica y las esperas pendientes;
+7. la frontera solo admite texto e imagen mientras archivos continúan sin adaptador probado;
+8. el estado persistente mantiene solo referencias y metadata técnica; no se agrega contenido crudo, nombres ni rutas privadas.
+
+`TransferSendCoordinator` expone además el momento seguro de registro de la solicitud y operaciones explícitas de descarte/limpieza para que esta frontera pueda evitar carreras sin duplicar payload.
+
+Gate de implementación: CI #140 verde en auditoría, 430/430 tests, lint, build, Web/Worker y Android sobre `093ece3ba238bc8479c8633eff94f2f666231287`.
+
 ## Privacidad, seguridad y costo
 
 - El WebSocket de control sigue sin transportar payload pesado.
@@ -99,12 +116,11 @@ Gate: CI #134 verde en auditoría, tests, lint, build, Web/Worker y Android sobr
 
 ## No sustituye todavía
 
-- rutas legacy de texto/imágenes en `App.tsx`;
-- frontera de producto que espere request → aceptación → selección → data plane;
+- callbacks legacy de texto/imágenes en `App.tsx`;
 - transferencia de archivos por el nuevo data plane;
 - Android wake/background;
 - fallback remoto del nuevo data plane.
 
 ## Siguiente checkpoint exacto
 
-Checkpoint 9: crear una frontera de envío del producto para texto/imagen local que mantenga por sala un `TransferSendCoordinator`, use `createPreparedTransferRouteManager` + `createTransferDataPlaneHandoff`, registre la fuente con `sendTransferRequestForSource` y devuelva una `Promise` que solo resuelva cuando la solicitud correlacionada termine realmente en el dispatcher. Debe correlacionar por `requestId`, propagar `unavailable`/errores, limpiar esperas vencidas o al desconectar y no modificar todavía `App.tsx` ni los botones actuales. Solo después de validar esa frontera de forma aislada podrá un checkpoint posterior sustituir el callback legacy de producto.
+Checkpoint 10: integrar primero **solo el envío local de texto** de `App.tsx` con la nueva frontera de producto. El callback actual `sendLocalTextDirect` debe dejar de llamar directamente a `sendLocalClipboardTextDirect`: debe crear la fuente con `createLocalTextTransferChunkSource`, reutilizar una `createLocalTransferProductBoundary` ligada a la sala activa y llamar `sendLocalSource` con `identity.deviceId` y el dispositivo destino. La frontera debe destruirse al cambiar/desmontar la sala, el éxito visible debe ocurrir solo cuando su `Promise` termine y los errores deben seguir llegando a la UI. En este checkpoint no se modifica todavía el callback legacy de imagen, General, archivos, wake/background ni fallback remoto. Después de validar texto de producto end-to-end se migrará imagen por separado.
