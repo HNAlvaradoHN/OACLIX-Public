@@ -1,7 +1,7 @@
 # Transfer Engine — OACLIX
 
 Fecha: 2026-09-16
-Estado: Paso 2 en desarrollo sobre `feat/transfer-engine`, dependiente del Paso 1 (`feat/transfer-control-plane`). Checkpoints 1–6 pasaron CI #119, #120, #122, #124, #126 y #130.
+Estado: Paso 2 en desarrollo sobre `feat/transfer-engine`, dependiente del Paso 1 (`feat/transfer-control-plane`). Checkpoints 1–7 pasaron CI #119, #120, #122, #124, #126, #130 y #132.
 
 ## Objetivo
 
@@ -53,9 +53,25 @@ Gate: CI #126 verde sobre `c1419c61d4b1461dbf2e16528d79cb780b2c9c50`.
 6. solo tras ese ACK marca los chunks completados, completa el journal en memoria y elimina el estado reanudable;
 7. si el contenido cambió, falta el item o Directo falla, no adelanta el journal ni borra el estado reanudable.
 
-Este adaptador todavía no sustituye el envío legacy en la UI/producto. Se mantiene aislado hasta demostrar equivalencia e integridad end-to-end. No toca relay, WebSocket de payload ni la ruta de imagen.
+Este adaptador todavía no sustituye el envío legacy en la UI/producto. Se mantiene aislado hasta demostrar equivalencia e integridad end-to-end.
 
 Gate: CI #130 verde en auditoría, tests, lint, build, Web/Worker y Android sobre `92ca2c11d2a93b159d846f4f12214dcfc1480031`.
+
+## Checkpoint 7 — adaptador `local-direct` de imagen ✅
+
+`src/transfer/localDirectImageAdapter.ts` aplica el mismo contrato seguro al envío de imágenes:
+
+1. exige operación sender `prepared` y selección `selected/local-direct` que coincidan exactamente;
+2. exige `sourceRef.provider = local-image` y reabre el item únicamente por `itemId` técnico;
+3. valida que Blob, `byteSize` y MIME sigan siendo coherentes;
+4. verifica los bytes reales y cada chunk contra el manifest antes de tocar el transporte;
+5. reutiliza de forma diferida `sendLocalImageDirect`, conservando el transporte Directo y su confirmación real `stored`;
+6. solo tras éxito del transporte completa chunks/journal y elimina el estado reanudable;
+7. imagen ausente, vencida, alterada o fallo/ACK ausente dejan el journal `prepared`, sin progreso falso ni borrado del estado.
+
+El adaptador permanece aislado: no sustituye rutas legacy, no agrega relay ni mueve payload por WebSocket.
+
+Gate: CI #132 verde en auditoría, tests, lint, build, Web/Worker y Android sobre `699b1ff5ec342b60018a1465572ff06b7c6c5d50`.
 
 ## Privacidad, seguridad y costo
 
@@ -68,10 +84,11 @@ Gate: CI #130 verde en auditoría, tests, lint, build, Web/Worker y Android sobr
 ## No sustituye todavía
 
 - rutas legacy de texto/imágenes;
-- adaptador de imagen;
+- integración de los adaptadores con el flujo de producto;
+- transferencia de archivos por el nuevo data plane;
 - Android wake/background;
 - fallback remoto del nuevo data plane.
 
 ## Siguiente checkpoint exacto
 
-Checkpoint 7: construir el adaptador `local-direct` de imagen siguiendo el mismo contrato del adaptador de texto: reabrir únicamente mediante `sourceRef` técnica, verificar bytes/chunks contra el manifest, reutilizar el transporte local existente y completar journal/estado solo después del ACK real. Mantener las rutas legacy intactas y no conectar todavía estos adaptadores como sustituto de producción.
+Checkpoint 8: crear el dispatcher/executor del data plane que consuma el `onHandoff` de `TransferSendCoordinator`, valide la `TransferRouteSelection` y despache únicamente `local-direct` hacia el adaptador correcto de texto o imagen. Debe rechazar selecciones `unavailable` o combinaciones no soportadas, no mover bytes por sí mismo y mantener las rutas legacy de producto intactas. La conexión a la UI/flujo de producción queda para un checkpoint posterior, después de validar este dispatcher de forma aislada.
