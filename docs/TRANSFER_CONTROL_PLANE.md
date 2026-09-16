@@ -1,7 +1,7 @@
 # Plano de control de transferencias — OACLIX
 
 Fecha: 2026-09-15
-Estado: Paso 1 iniciado; checkpoint 1 implementado en `feat/transfer-control-plane`.
+Estado: Paso 1 iniciado; checkpoint 1 online implementado en `feat/transfer-control-plane`.
 
 ## Objetivo
 
@@ -16,15 +16,16 @@ Separar la coordinación de una transferencia de los bytes reales. Cloudflare pu
 - cualquiera de los dos extremos puede cancelar su solicitud;
 - mensajes de control limitados a 2 KiB y con claves exactas para impedir usar este camino como relay encubierto de contenido;
 - `RealtimeHub` reenvía `transfer-control` únicamente a otro dispositivo vinculado de la misma persona;
+- `RealtimeSignalClient` envía/recibe este control por un bus separado de los payloads de texto e imagen;
+- pruebas unitarias fijan dirección, vigencia, límites y wiring cliente/servidor;
 - se mantiene el camino viejo sin cambios mientras la migración nueva no tenga reemplazo probado.
 
 ## Todavía pendiente dentro del Paso 1
 
-1. integrar el cliente PWA/Android con este contrato sin mezclarlo con `device-transfer` / `device-image-transfer`;
-2. añadir solicitudes pendientes cuando el receptor esté temporalmente offline, guardando solo control/metadatos y con expiración corta;
-3. separar el estado `dispositivo conocido`, `online`, `solicitud pendiente` y `canal de datos disponible`;
-4. conectar aceptación/rechazo con el futuro Route Manager;
-5. retirar el relay viejo de contenido por WebSocket solo cuando la ruta nueva esté probada.
+1. añadir solicitudes pendientes cuando el receptor esté temporalmente offline, guardando solo control/metadatos y con expiración corta;
+2. separar el estado `dispositivo conocido`, `online`, `solicitud pendiente` y `canal de datos disponible`;
+3. conectar aceptación/rechazo con el futuro Route Manager;
+4. retirar el relay viejo de contenido por WebSocket solo cuando la ruta nueva esté probada.
 
 ## Regla de costo
 
@@ -32,4 +33,4 @@ Este paso no activa R2, TURN, SFU ni ningún servicio facturable. El Durable Obj
 
 ## Siguiente checkpoint exacto
 
-Cablear `RealtimeSignalClient` a `transfer-control`, publicar eventos por un bus separado y probar solicitud/aceptación entre dos clientes online. Después se añade persistencia corta para receptor offline.
+Persistir solicitudes pendientes de corta duración para un receptor offline y entregarlas al reconectar, sin guardar contenido. Después exponer claramente los estados `conocido`, `online`, `pendiente` y `canal de datos disponible`.
