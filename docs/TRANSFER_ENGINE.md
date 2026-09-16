@@ -1,7 +1,7 @@
 # Transfer Engine — OACLIX
 
 Fecha: 2026-09-16
-Estado: Paso 2 en desarrollo sobre `feat/transfer-engine`, dependiente del Paso 1 (`feat/transfer-control-plane`). Checkpoints 1–5 pasaron CI #119, #120, #122, #124 y #126. Checkpoint 6 está implementado y pendiente de gate CI.
+Estado: Paso 2 en desarrollo sobre `feat/transfer-engine`, dependiente del Paso 1 (`feat/transfer-control-plane`). Checkpoints 1–6 pasaron CI #119, #120, #122, #124, #126 y #130.
 
 ## Objetivo
 
@@ -41,7 +41,7 @@ Gate: CI #124 verde.
 
 Gate: CI #126 verde sobre `c1419c61d4b1461dbf2e16528d79cb780b2c9c50`.
 
-## Checkpoint 6 — adaptador `local-direct` de texto
+## Checkpoint 6 — adaptador `local-direct` de texto ✅
 
 `src/transfer/localDirectTextAdapter.ts` crea el primer puente controlado entre el Transfer Engine y el data plane local existente:
 
@@ -55,7 +55,7 @@ Gate: CI #126 verde sobre `c1419c61d4b1461dbf2e16528d79cb780b2c9c50`.
 
 Este adaptador todavía no sustituye el envío legacy en la UI/producto. Se mantiene aislado hasta demostrar equivalencia e integridad end-to-end. No toca relay, WebSocket de payload ni la ruta de imagen.
 
-Gate pendiente: auditoría pública, tests, lint, build, Web/Worker y Android.
+Gate: CI #130 verde en auditoría, tests, lint, build, Web/Worker y Android sobre `92ca2c11d2a93b159d846f4f12214dcfc1480031`.
 
 ## Privacidad, seguridad y costo
 
@@ -74,4 +74,4 @@ Gate pendiente: auditoría pública, tests, lint, build, Web/Worker y Android.
 
 ## Siguiente checkpoint exacto
 
-Después de CI verde del Checkpoint 6, decidir con evidencia entre conectar este adaptador de texto al flujo real en modo controlado/shadow o construir primero el adaptador de imagen. No retirar legacy hasta demostrar equivalencia, integridad end-to-end y fallback seguro.
+Checkpoint 7: construir el adaptador `local-direct` de imagen siguiendo el mismo contrato del adaptador de texto: reabrir únicamente mediante `sourceRef` técnica, verificar bytes/chunks contra el manifest, reutilizar el transporte local existente y completar journal/estado solo después del ACK real. Mantener las rutas legacy intactas y no conectar todavía estos adaptadores como sustituto de producción.
