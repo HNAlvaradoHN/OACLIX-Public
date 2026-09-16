@@ -24,7 +24,7 @@ const sourceRef = {
   itemId: 'itm_0123456789abcdef0123456789abcdef',
 }
 
-async function resumableState() {
+async function resumableState(contentKind: 'file' | 'image' = 'file') {
   const manifest = await buildTransferManifestFromBlob(
     new Blob([new Uint8Array(TRANSFER_ENGINE_CHUNK_BYTES + 7)]),
     {
@@ -32,7 +32,7 @@ async function resumableState() {
       transferId,
       senderDeviceId,
       receiverDeviceId,
-      contentKind: 'file',
+      contentKind,
       createdAt,
     },
   )
@@ -53,11 +53,23 @@ test('snapshot durable conserva solo metadata técnica, sin payload', async () =
 })
 
 test('referencia local reabrible puede persistirse sin copiar el contenido', async () => {
-  const { manifest, journal } = await resumableState()
+  const { manifest, journal } = await resumableState('image')
   const state = await createTransferOperationStateSnapshot(manifest, journal, createdAt + 3, sourceRef)
   const restored = await restoreTransferOperationStateSnapshot(state, createdAt + 4)
   assert.deepEqual(restored?.sourceRef, sourceRef)
   assert.doesNotMatch(JSON.stringify(restored), /blob|base64Data|fileName|clipboardText/)
+})
+
+test('sourceRef debe corresponder al tipo real del manifest', async () => {
+  const { manifest, journal, state } = await resumableState('file')
+  await assert.rejects(
+    () => createTransferOperationStateSnapshot(manifest, journal, createdAt + 3, sourceRef),
+    /no coincide/,
+  )
+  assert.equal(
+    await restoreTransferOperationStateSnapshot({ ...state, sourceRef }, createdAt + 4),
+    null,
+  )
 })
 
 test('estado inactivo expira y no se restaura indefinidamente', async () => {
@@ -84,7 +96,7 @@ test('metadata añadida al snapshot se rechaza para evitar persistir contenido a
 })
 
 test('referencia de fuente con campos extra se rechaza', async () => {
-  const { state } = await resumableState()
+  const { state } = await resumableState('image')
   const polluted = {
     ...state,
     sourceRef: { ...sourceRef, fileName: 'privado.png' },

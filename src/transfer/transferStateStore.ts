@@ -51,6 +51,16 @@ function validSourceReference(value: unknown) {
   return value === null || validTransferSourceReference(value)
 }
 
+function sourceReferenceMatchesManifest(
+  sourceRef: TransferSourceReference | null,
+  manifest: TransferManifest,
+) {
+  if (sourceRef === null) return true
+  if (sourceRef.provider === 'local-text') return manifest.contentKind === 'text'
+  if (sourceRef.provider === 'local-image') return manifest.contentKind === 'image'
+  return false
+}
+
 function stateWithinRetention(state: TransferOperationState, now: number) {
   if (!validTimestamp(now)) return false
   if (state.manifest.createdAt > now + TRANSFER_STATE_CLOCK_SKEW_MS) return false
@@ -75,13 +85,15 @@ export async function restoreTransferOperationStateSnapshot(
   ) return null
   if (!validTransferManifestShape(value.manifest) || !(await verifyTransferManifest(value.manifest))) return null
   if (!validTransferJournal(value.journal, value.manifest) || !transferJournalCanResume(value.journal, value.manifest)) return null
+  const sourceRef = value.sourceRef === null ? null : value.sourceRef
+  if (!sourceReferenceMatchesManifest(sourceRef, value.manifest)) return null
 
   const state: TransferOperationState = {
     version: 1,
     type: 'transfer-operation-state',
     manifest: value.manifest,
     journal: value.journal,
-    sourceRef: value.sourceRef === null ? null : { ...value.sourceRef },
+    sourceRef: sourceRef ? { ...sourceRef } : null,
     savedAt: Number(value.savedAt),
   }
   return stateWithinRetention(state, now) ? state : null
@@ -97,6 +109,9 @@ export async function createTransferOperationStateSnapshot(
   if (!validSourceReference(sourceRef)) throw new Error('Referencia de fuente inválida')
   if (!validTransferManifestShape(manifest) || !(await verifyTransferManifest(manifest))) {
     throw new Error('Manifest de transferencia inválido')
+  }
+  if (!sourceReferenceMatchesManifest(sourceRef, manifest)) {
+    throw new Error('La referencia de fuente no coincide con el contenido')
   }
   if (!validTransferJournal(journal, manifest) || !transferJournalCanResume(journal, manifest)) {
     throw new Error('Journal no reanudable')
