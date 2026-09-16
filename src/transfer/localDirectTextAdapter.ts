@@ -3,7 +3,6 @@ import {
   createLocalTextTransferChunkSource,
   loadLocalTextTransferItem,
 } from '../data/transferSourceProviders.ts'
-import { sendLocalClipboardTextDirect } from '../transport/localClipboardDirectTransport.ts'
 import {
   completeTransferJournal,
   markTransferChunkCompleted,
@@ -45,9 +44,18 @@ export type LocalDirectTextTransferResult = {
   journal: TransferJournal
 }
 
+async function sendTextViaExistingDirectTransport(
+  roomId: string,
+  receiverDeviceId: string,
+  item: TransferableLocalClipboardText,
+) {
+  const { sendLocalClipboardTextDirect } = await import('../transport/localClipboardDirectTransport.ts')
+  return sendLocalClipboardTextDirect(roomId, receiverDeviceId, item)
+}
+
 const defaultDependencies: LocalDirectTextAdapterDependencies = {
   loadTextItem: loadLocalTextTransferItem,
-  sendText: sendLocalClipboardTextDirect,
+  sendText: sendTextViaExistingDirectTransport,
   deleteState: deleteTransferOperationState,
   now: Date.now,
 }
