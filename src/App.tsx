@@ -20,6 +20,7 @@ import { selectRecentGeneralTexts } from './data/generalClipboardView'
 import { deleteGeneralTargetedInboxItem, readGeneralTargetedInbox, type GeneralTargetedInboxItem } from './data/generalTargetedInbox'
 import { createLocalClipboardText, deleteLocalClipboardText, normalizeLocalClipboardTexts, readLocalClipboardTexts, type LocalClipboardTextSnapshot } from './data/localClipboard'
 import { readLocalImages, type LocalImageClipboardSnapshot } from './data/localImageClipboard'
+import { createLocalTextTransferChunkSource } from './data/transferSourceProviders'
 import { clipboardItems as initialItems, rooms } from './data/mockData'
 import { preserveTextOnThisDevice, readLocalPreservedTexts, releaseTextFromThisDevice } from './data/preservedClipboard'
 import { readDefaultRoomId, saveDefaultRoomId } from './data/roomPreference'
@@ -30,9 +31,10 @@ import { applyTheme, getThemePreference, saveThemePreference, type ThemePreferen
 import { classifyDirectSequence } from './transport/directCursorPolicy'
 import { subscribeGeneralTargetedReceipts } from './transport/generalTargetedReceiptBus'
 import { sendGeneralTargetedText } from './transport/generalTargetedTextTransport'
-import { sendLocalClipboardTextDirect, subscribeLocalClipboardDirectReceipts } from './transport/localClipboardDirectTransport'
+import { subscribeLocalClipboardDirectReceipts } from './transport/localClipboardDirectTransport'
 import { sendLocalImageDirect, subscribeLocalImageDirectReceipts } from './transport/localImageDirectTransport'
 import { keepCursorMonotonic, selectChangesAfterCursor } from './transport/syncCursorPolicy'
+import { createLocalTransferProductBoundary } from './transfer/localTransferProductBoundary'
 import type { ClipboardItem, PreserveTarget, Room } from './types'
 
 type GeneralSyncStatus = 'idle' | 'syncing' | 'ready' | 'error'
@@ -81,6 +83,10 @@ function App() {
   const generalItemsRef = useRef<ClipboardTextSnapshot[]>([])
   const generalSyncingRef = useRef(false)
   const identityRequestRef = useRef<Promise<DeviceIdentitySnapshot> | null>(null)
+  const localTransferBoundaryRef = useRef<{
+    roomId: string
+    boundary: ReturnType<typeof createLocalTransferProductBoundary>
+  } | null>(null)
 
   const favorite = useMemo(
     () => rooms.find((room) => room.id === defaultRoomId) ?? rooms[0],
@@ -265,13 +271,24 @@ function App() {
 
   const sendLocalTextDirect = useCallback(async (deviceId: string) => {
     const roomId = identity?.generalRoomId
-    if (!roomId || !identity.persisted) throw new Error('La identidad vinculada todavía no está disponible')
+    const senderDeviceId = identity?.deviceId
+    if (!roomId || !senderDeviceId || !identity.persisted) {
+      throw new Error('La identidad vinculada todavía no está disponible')
+    }
     const item = localItems.find((entry) => entry.id === localShareItemId)
     if (!item) throw new Error('Este texto ya no está disponible')
+    const currentBoundary = localTransferBoundaryRef.current
+    if (!currentBoundary || currentBoundary.roomId !== roomId) {
+      throw new Error('La transferencia local todavía se está preparando')
+    }
 
-    await sendLocalClipboardTextDirect(roomId, deviceId, item)
+    await currentBoundary.boundary.sendLocalSource(
+      senderDeviceId,
+      deviceId,
+      createLocalTextTransferChunkSource(item),
+    )
     flash('Texto enviado por Directo local')
-  }, [flash, identity?.generalRoomId, identity?.persisted, localItems, localShareItemId])
+  }, [flash, identity?.deviceId, identity?.generalRoomId, identity?.persisted, localItems, localShareItemId])
 
   const sendLocalImageToDirect = useCallback(async (deviceId: string) => {
     const roomId = identity?.generalRoomId
@@ -437,6 +454,25 @@ function App() {
 
   useEffect(() => {
     const roomId = identity?.generalRoomId
+    if (!roomId || !identity.persisted) {
+      const current = localTransferBoundaryRef.current
+      localTransferBoundaryRef.current = null
+      current?.boundary.disconnect()
+      return
+    }
+
+    const boundary = createLocalTransferProductBoundary(roomId)
+    localTransferBoundaryRef.current = { roomId, boundary }
+    return () => {
+      if (localTransferBoundaryRef.current?.boundary === boundary) {
+        localTransferBoundaryRef.current = null
+      }
+      boundary.disconnect()
+    }
+  }, [identity?.generalRoomId, identity?.persisted])
+
+  useEffect(() => {
+    const roomId = identity?.generalRoomId
     if (!roomId || !identity.persisted) return
 
     return subscribeLocalClipboardDirectReceipts(roomId, (item) => {
@@ -452,7 +488,6 @@ function App() {
       flash('Imagen recibida por Directo local')
     })
   }, [flash, identity?.generalRoomId, identity?.persisted])
-
 
   useEffect(() => {
     let cancelled = false
@@ -558,7 +593,6 @@ function App() {
     else ensureClipboardRoomControlConnectivity(roomId)
     return () => suspendClipboardRoomConnectivity(roomId)
   }, [connectedSurfaceMode, identity?.generalRoomId, identity?.persisted])
-
 
   useEffect(() => {
     const roomId = identity?.generalRoomId
