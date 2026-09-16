@@ -7,6 +7,7 @@ import {
   markTransferChunkCompleted,
 } from '../src/transfer/transferJournal.ts'
 import {
+  TRANSFER_STATE_CLOCK_SKEW_MS,
   TRANSFER_STATE_MAX_IDLE_MS,
   createTransferOperationStateSnapshot,
   restoreTransferOperationStateSnapshot,
@@ -51,6 +52,15 @@ test('estado inactivo expira y no se restaura indefinidamente', async () => {
     await restoreTransferOperationStateSnapshot(state, state.savedAt + TRANSFER_STATE_MAX_IDLE_MS + 1),
     null,
   )
+})
+
+test('timestamp demasiado futuro se rechaza durante restauración', async () => {
+  const { state } = await resumableState()
+  const future = {
+    ...state,
+    savedAt: createdAt + TRANSFER_STATE_CLOCK_SKEW_MS + 100,
+  }
+  assert.equal(await restoreTransferOperationStateSnapshot(future, createdAt), null)
 })
 
 test('metadata añadida al snapshot se rechaza para evitar persistir contenido accidental', async () => {
