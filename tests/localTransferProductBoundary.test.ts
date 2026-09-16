@@ -125,7 +125,8 @@ test('la frontera resuelve solo después de completar el handoff del data plane'
   assert.equal(result.requestId, request.requestId)
   assert.equal(result.selection.status, 'selected')
   assert.equal(result.selection.route, 'local-direct')
-  assert.ok(result.transferId.startsWith('trf_'))
+  assert.equal(result.transferId, result.selection.transferId)
+  assert.match(result.transferId, /^txf_[a-f0-9]{32}$/)
   boundary.disconnect()
 })
 
