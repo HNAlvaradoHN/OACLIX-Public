@@ -1,7 +1,7 @@
 import {
   validImageBase64,
   type LocalImageTransferItem,
-} from '../shared/localImageTransferCore'
+} from '../shared/localImageTransferCore.ts'
 
 export {
   CLOUD_IMAGE_MAX_BYTES,
@@ -10,13 +10,13 @@ export {
   validImageBase64,
   validLocalImageTransfer,
   validLocalImageTransferAck,
-} from '../shared/localImageTransferCore'
+} from '../shared/localImageTransferCore.ts'
 
 export type {
   LocalImageTransfer,
   LocalImageTransferAck,
   LocalImageTransferItem,
-} from '../shared/localImageTransferCore'
+} from '../shared/localImageTransferCore.ts'
 
 export function decodeImageTransferBytes(item: LocalImageTransferItem) {
   if (!validImageBase64(item.base64Data, item.byteSize)) throw new Error('Imagen remota inválida')
