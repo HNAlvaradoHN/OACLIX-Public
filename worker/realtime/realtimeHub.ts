@@ -168,7 +168,7 @@ export class RealtimeHub extends DurableObject {
       }
 
       if (control.message.type === 'transfer-cancel') {
-        await this.resolvePendingTransferRequest(control.message, Date.now())
+        await this.resolvePendingTransferRequest(current.personId, control.message, Date.now())
         if (targetIsSamePerson && target) {
           send(target.socket, {
             type: 'transfer-control',
@@ -180,7 +180,7 @@ export class RealtimeHub extends DurableObject {
       }
 
       if (!targetIsSamePerson || !target) return
-      await this.resolvePendingTransferRequest(control.message, Date.now())
+      await this.resolvePendingTransferRequest(current.personId, control.message, Date.now())
       send(target.socket, {
         type: 'transfer-control',
         fromDeviceId: current.deviceId,
@@ -296,12 +296,14 @@ export class RealtimeHub extends DurableObject {
   }
 
   private async resolvePendingTransferRequest(
+    personId: string,
     message: { requestId: string; senderDeviceId: string; receiverDeviceId: string },
     now: number,
   ) {
     const pending = await this.readPendingTransferRequests(now)
     const remaining = removePendingTransferRequest(
       pending,
+      personId,
       message.requestId,
       message.senderDeviceId,
       message.receiverDeviceId,
