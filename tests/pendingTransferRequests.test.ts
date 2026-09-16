@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { TRANSFER_REQUEST_MAX_CLOCK_SKEW_MS } from '../src/shared/transferControlProtocol.ts'
 import {
   MAX_PENDING_TRANSFER_REQUESTS_PER_DEVICE,
   nextPendingTransferExpiry,
@@ -35,12 +36,20 @@ function pendingRecord(index = 0): PendingTransferRequestRecord {
   }
 }
 
-test('la cola conserva solo solicitudes válidas y no expiradas', () => {
+test('la cola conserva solo solicitudes válidas, vivas y cercanas al reloj del servidor', () => {
   const live = pendingRecord(1)
   const expired = { ...pendingRecord(2), message: { ...pendingRecord(2).message, expiresAt: now } }
   const wrongSender = { ...pendingRecord(3), fromDeviceId: 'dev_cccccccccccccccc' }
+  const future = {
+    ...pendingRecord(4),
+    message: {
+      ...pendingRecord(4).message,
+      createdAt: now + TRANSFER_REQUEST_MAX_CLOCK_SKEW_MS + 1,
+      expiresAt: now + TRANSFER_REQUEST_MAX_CLOCK_SKEW_MS + 60_001,
+    },
+  }
 
-  assert.deepEqual(normalizePendingTransferRequests([live, expired, wrongSender], now), [live])
+  assert.deepEqual(normalizePendingTransferRequests([live, expired, wrongSender, future], now), [live])
 })
 
 test('la cola es idempotente por requestId y no permite reemplazar identidad', () => {
