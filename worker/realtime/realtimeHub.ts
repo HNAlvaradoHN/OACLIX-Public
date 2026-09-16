@@ -1,5 +1,15 @@
 import { DurableObject } from 'cloudflare:workers'
 import { parseDeviceRelayInput } from './deviceRelayProtocol'
+import {
+  PENDING_TRANSFER_STORAGE_KEY,
+  nextPendingTransferExpiry,
+  normalizePendingTransferRequests,
+  pendingTransferRequestsForDevice,
+  queuePendingTransferRequest,
+  removePendingTransferRequest,
+  removePendingTransferRequestsForDevice,
+  type PendingTransferRequestRecord,
+} from './pendingTransferRequests'
 import { parseTransferControlInput } from './transferControlProtocol'
 
 type SocketAttachment = {
@@ -84,6 +94,7 @@ export class RealtimeHub extends DurableObject {
     this.ctx.acceptWebSocket(server)
     server.serializeAttachment({ roomId, personId, deviceId, sessionId, connectedAt })
     send(server, { type: 'ready', deviceId, sessionId })
+    await this.deliverPendingTransferRequests(server, personId, deviceId)
     this.broadcastPresence()
 
     return new Response(null, {
@@ -93,7 +104,7 @@ export class RealtimeHub extends DurableObject {
     } as ResponseInit & { webSocket: WebSocket })
   }
 
-  webSocketMessage(socket: AttachedWebSocket, message: string | ArrayBuffer) {
+  async webSocketMessage(socket: AttachedWebSocket, message: string | ArrayBuffer) {
     if (typeof message !== 'string' || message.length > MAX_MESSAGE_LENGTH) {
       socket.close(1009, 'Mensaje inválido')
       return
@@ -136,7 +147,35 @@ export class RealtimeHub extends DurableObject {
     const control = parseTransferControlInput(parsed, current.deviceId)
     if (control) {
       const target = latest.get(control.targetDeviceId)
-      if (!target || target.attachment.personId !== current.personId) return
+      const targetIsSamePerson = Boolean(target && target.attachment.personId === current.personId)
+
+      if (control.message.type === 'transfer-request') {
+        if (targetIsSamePerson && target) {
+          send(target.socket, {
+            type: 'transfer-control',
+            fromDeviceId: current.deviceId,
+            message: control.message,
+          })
+        } else if (!target) {
+          await this.queuePendingTransferRequest(current, control.message)
+        }
+        return
+      }
+
+      if (control.message.type === 'transfer-cancel') {
+        await this.resolvePendingTransferRequest(control.message, Date.now())
+        if (targetIsSamePerson && target) {
+          send(target.socket, {
+            type: 'transfer-control',
+            fromDeviceId: current.deviceId,
+            message: control.message,
+          })
+        }
+        return
+      }
+
+      if (!targetIsSamePerson || !target) return
+      await this.resolvePendingTransferRequest(control.message, Date.now())
       send(target.socket, {
         type: 'transfer-control',
         fromDeviceId: current.deviceId,
@@ -202,7 +241,72 @@ export class RealtimeHub extends DurableObject {
     this.broadcastPresence()
   }
 
-  private unlinkDevice(request: Request) {
+  async alarm() {
+    const now = Date.now()
+    const pending = await this.readPendingTransferRequests(now)
+    await this.writePendingTransferRequests(pending, now)
+  }
+
+  private async readPendingTransferRequests(now: number) {
+    const stored = await this.ctx.storage.get<PendingTransferRequestRecord[]>(PENDING_TRANSFER_STORAGE_KEY)
+    return normalizePendingTransferRequests(stored, now)
+  }
+
+  private async writePendingTransferRequests(pending: PendingTransferRequestRecord[], now: number) {
+    const normalized = normalizePendingTransferRequests(pending, now)
+    if (normalized.length === 0) {
+      await this.ctx.storage.delete(PENDING_TRANSFER_STORAGE_KEY)
+      await this.ctx.storage.deleteAlarm()
+      return
+    }
+
+    await this.ctx.storage.put(PENDING_TRANSFER_STORAGE_KEY, normalized)
+    const nextExpiry = nextPendingTransferExpiry(normalized, now)
+    if (nextExpiry != null) await this.ctx.storage.setAlarm(nextExpiry)
+  }
+
+  private async queuePendingTransferRequest(current: SocketAttachment, message: Extract<ReturnType<typeof parseTransferControlInput>, { message: { type: 'transfer-request' } }>['message']) {
+    const now = Date.now()
+    const pending = await this.readPendingTransferRequests(now)
+    const queued = queuePendingTransferRequest(pending, {
+      personId: current.personId,
+      fromDeviceId: current.deviceId,
+      message,
+    }, now)
+    if (!queued.accepted) return
+    await this.writePendingTransferRequests(queued.pending, now)
+  }
+
+  private async deliverPendingTransferRequests(socket: WebSocket, personId: string, deviceId: string) {
+    const now = Date.now()
+    const pending = await this.readPendingTransferRequests(now)
+    for (const record of pendingTransferRequestsForDevice(pending, personId, deviceId, now)) {
+      send(socket, {
+        type: 'transfer-control',
+        fromDeviceId: record.fromDeviceId,
+        message: record.message,
+      })
+    }
+    await this.writePendingTransferRequests(pending, now)
+  }
+
+  private async resolvePendingTransferRequest(
+    message: { requestId: string; senderDeviceId: string; receiverDeviceId: string },
+    now: number,
+  ) {
+    const pending = await this.readPendingTransferRequests(now)
+    const remaining = removePendingTransferRequest(
+      pending,
+      message.requestId,
+      message.senderDeviceId,
+      message.receiverDeviceId,
+      now,
+    )
+    if (remaining.length === pending.length) return
+    await this.writePendingTransferRequests(remaining, now)
+  }
+
+  private async unlinkDevice(request: Request) {
     const deviceId = request.headers.get('X-OACLIX-Device-Id') ?? ''
     if (!DEVICE_ID_PATTERN.test(deviceId)) return new Response('Dispositivo inválido', { status: 400 })
 
@@ -213,6 +317,11 @@ export class RealtimeHub extends DurableObject {
       if (socket.readyState < WebSocket.CLOSING) socket.close(4003, 'Dispositivo desvinculado')
       closed += 1
     }
+
+    const now = Date.now()
+    const pending = await this.readPendingTransferRequests(now)
+    const remaining = removePendingTransferRequestsForDevice(pending, deviceId, now)
+    await this.writePendingTransferRequests(remaining, now)
 
     this.broadcastPresence()
     return Response.json({ unlinked: true, closed })
