@@ -1,11 +1,11 @@
 # Transfer Engine — OACLIX
 
 Fecha: 2026-09-16
-Estado: Paso 2 en desarrollo sobre `feat/transfer-engine`, dependiente del Paso 1 (`feat/transfer-control-plane`). Checkpoint 1 pasó CI #119; Checkpoint 2 pasó CI #120; Checkpoint 3 pasó CI #122.
+Estado: Paso 2 en desarrollo sobre `feat/transfer-engine`, dependiente del Paso 1 (`feat/transfer-control-plane`). Checkpoint 1 pasó CI #119; Checkpoint 2 pasó CI #120; Checkpoint 3 pasó CI #122; Checkpoint 4 pasó CI #124.
 
 ## Objetivo
 
-Mover texto, imágenes y archivos con un motor independiente del transporte. El motor no decide si la ruta es LAN, WebRTC, Wi-Fi Direct, Internet directo o relay: define cómo describir, verificar, reanudar y preparar una operación antes de entregarla al futuro Route Manager.
+Mover texto, imágenes y archivos con un motor independiente del transporte. El motor no decide si la ruta es LAN, WebRTC, Wi-Fi Direct, Internet directo o relay: define cómo describir, verificar, reanudar y preparar una operación antes de entregarla al Route Manager.
 
 ## Experiencia ya decidida
 
@@ -78,11 +78,29 @@ Gate: CI #120 verde en Web/Worker y Android.
 
 Gate: CI #122 verde en tests, lint, build, auditoría pública, Web/Worker y Android sobre `f95db68a6580b86abe2a9ec6653df565507e20f9`.
 
+## Checkpoint 4 — solicitud real → fuente correlacionada → Route Manager ✅
+
+`src/transfer/transferSendCoordinator.ts` conecta el flujo real de solicitud con la operación preparada sin convertir el plano de control en transporte de datos:
+
+1. abre/valida la fuente y calcula su tamaño real;
+2. registra la fuente localmente **antes** de emitir `transfer-request`;
+3. correlaciona fuente y solicitud por `requestId`, emisor, receptor, tipo, tamaño y vigencia;
+4. aplica límites de 32 pendientes por sala y 8 por receptor para evitar acumulación;
+5. ante `accepted`, consume exactamente la fuente correlacionada y entrega el `Route Intent` al Transfer Engine;
+6. el Transfer Engine persiste manifest/journal/sourceRef antes de publicar la operación preparada;
+7. recién entonces `PreparedTransferRouteManager` recibe la operación;
+8. rechazo, cancelación, fallo al emitir control o expiración limpian la fuente pendiente.
+
+El checkpoint mantiene una frontera deliberada: `PreparedTransferRouteManager` recibe una operación preparada, pero todavía no decide una ruta concreta ni mueve bytes. No llama WebRTC, DataChannel, relay ni rutas legacy desde el coordinador nuevo.
+
+Gate: CI #124 verde en auditoría pública, tests, lint, build, Web/Worker y Android sobre `ce924536ac7879f552f7612fd9f5c23c6a00fcba`.
+
 ## Privacidad y seguridad
 
 - ningún payload nuevo viaja por el WebSocket de control;
 - manifest, journal, `sourceRef` y Route Intent contienen únicamente metadata técnica necesaria;
-- no se introducen secrets, hostnames privados, nombres reales de archivos, rutas/URI privadas ni contenido del portapapeles;
+- la correlación pendiente mantiene la fuente solo en memoria de la sesión hasta que se acepta, rechaza, cancela, vence o falla el envío;
+- no se introducen secrets, hostnames privados, nombres reales de archivos, rutas/URI privadas ni contenido del portapapeles en metadata técnica;
 - rige `SECURITY.md`;
 - hashes dan integridad, no confidencialidad; E2E pertenece a la capa de ruta.
 
@@ -96,8 +114,8 @@ Todo lo anterior es lógica y almacenamiento local. No activa R2, TURN, SFU, alm
 - DataChannel de imágenes existente;
 - control plane del Paso 1;
 - Android wake/background;
-- selección de ruta.
+- selección de ruta ni movimiento de bytes del nuevo data plane.
 
 ## Siguiente checkpoint exacto
 
-Checkpoint 4: registrar la fuente antes de emitir `transfer-request`, correlacionarla por `requestId`, recuperarla tras autoaceptación y entregar la operación preparada a una interfaz mínima del Route Manager. Durante este checkpoint el flujo nuevo debe permanecer en migración controlada: no retirar ni sustituir las rutas legacy que todavía entregan los bytes hasta que el nuevo data plane tenga un reemplazo probado.
+Checkpoint 5: definir el contrato concreto del Route Manager para recibir una operación preparada, evaluar únicamente rutas realmente disponibles y devolver una decisión de ruta separada del movimiento de bytes. Empezar por la ruta local/directa ya existente mediante un adaptador aislado, manteniendo intacto el camino legacy hasta demostrar equivalencia, integridad y fallback seguro.
