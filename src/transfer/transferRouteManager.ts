@@ -58,15 +58,18 @@ function validSelectedAt(value: number) {
   return Number.isSafeInteger(value) && value > 0
 }
 
+function supportsExistingLocalDirect(contentKind: TransferContentKind) {
+  return contentKind === 'text' || contentKind === 'image'
+}
+
 export function currentTransferRouteAvailability(
   roomId: string,
   operation: PreparedSenderTransferOperation,
 ): TransferRouteAvailability {
   const state = getDeviceAvailabilityState(roomId, operation.intent.receiverDeviceId)
-  const kindSupportsExistingDirectRoute = operation.manifest.contentKind === 'text'
-    || operation.manifest.contentKind === 'image'
   return {
-    localDirect: kindSupportsExistingDirectRoute && state.dataChannel === 'available',
+    localDirect: supportsExistingLocalDirect(operation.manifest.contentKind)
+      && state.dataChannel === 'available',
   }
 }
 
@@ -81,8 +84,8 @@ export async function selectPreparedTransferRoute(
   assertPreparedOperation(operation)
 
   const availability = await resolveAvailability(roomId, operation)
-  const localDirect = availability?.localDirect === true
-  const selected = localDirect
+  const selected = availability?.localDirect === true
+    && supportsExistingLocalDirect(operation.manifest.contentKind)
 
   return {
     version: 1,

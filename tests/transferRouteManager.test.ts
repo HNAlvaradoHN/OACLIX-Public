@@ -79,6 +79,19 @@ test('archivo queda unavailable aunque exista DataChannel porque aún no hay ada
   assert.equal(selection.route, null)
 })
 
+test('un resolver no puede habilitar local-direct para un tipo sin adaptador probado', async () => {
+  const operation = await preparedOperation('file')
+  const selection = await selectPreparedTransferRoute(
+    'room_route_file_guard',
+    operation,
+    Date.now(),
+    async () => ({ localDirect: true }),
+  )
+
+  assert.equal(selection.status, 'unavailable')
+  assert.equal(selection.route, null)
+})
+
 test('Route Manager rechaza operaciones que ya no están en estado prepared', async () => {
   const roomId = 'room_route_invalid_journal'
   publishDataChannelDeviceIds(roomId, [receiverDeviceId])
