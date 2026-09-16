@@ -1,7 +1,7 @@
 # Transfer Engine — OACLIX
 
 Fecha: 2026-09-16
-Estado: Paso 2 en desarrollo sobre `feat/transfer-engine`, dependiente del Paso 1 (`feat/transfer-control-plane`).
+Estado: Paso 2 en desarrollo sobre `feat/transfer-engine`, dependiente del Paso 1 (`feat/transfer-control-plane`). Checkpoint 1 pasó CI #119 en Web/Worker y Android. Checkpoint 2 está implementado y pendiente de su gate CI.
 
 ## Objetivo
 
@@ -9,55 +9,51 @@ Mover texto, imágenes y archivos con un motor independiente del transporte. El 
 
 ## Dependencia de experiencia ya decidida
 
-El Transfer Engine debe respetar el requisito fijado en el Paso 1: un dispositivo propio ya vinculado/confiable recibe sin pedir confirmación manual por cada transferencia. Que la app receptora esté cerrada tampoco debe cambiar esa experiencia; la etapa de Android wake despertará el receptor de forma ligera y temporal. Por eso este motor se diseña desde ahora para poder reanudar desde journal después de interrupciones y no depende de mantener WebRTC u otro transporte pesado activo permanentemente.
+El Transfer Engine debe respetar el requisito fijado en el Paso 1: un dispositivo propio ya vinculado/confiable recibe sin pedir confirmación manual por cada transferencia. Que la app receptora esté cerrada tampoco debe cambiar esa experiencia; la etapa de Android wake despertará el receptor de forma ligera y temporal. Por eso este motor se diseña para reanudar desde journal después de interrupciones y no depende de mantener WebRTC u otro transporte pesado activo permanentemente.
 
 ## Checkpoint 1 — manifest, chunks, hashes y journal
 
-### Manifest
+`src/transfer/transferManifest.ts` y `src/transfer/transferJournal.ts` establecen:
 
-`src/transfer/transferManifest.ts` introduce un manifest técnico sin contenido de usuario:
+- correlación `requestId` + `transferId`;
+- chunks lógicos de **4 MiB**, independientes del tamaño de frame de red;
+- SHA-256 por chunk y SHA-256 canónico del manifest;
+- hashing de un chunk a la vez para no cargar un archivo grande completo solo para calcular integridad;
+- journal sender/receiver ligado al hash exacto del manifest;
+- progreso por rangos compactos, idempotencia y cálculo de rangos faltantes;
+- prohibición de marcar `complete` mientras falten chunks;
+- cero payload, base64, texto, imagen o nombre de archivo dentro de manifest/journal.
 
-- correlaciona la transferencia con el `requestId` del plano de control y un `transferId` propio;
-- conserva emisor, receptor, tipo general (`text` / `image` / `file`) y tamaño total;
-- divide el contenido en chunks lógicos de **4 MiB**;
-- cada chunk lleva `index`, longitud exacta y SHA-256;
-- el último chunk puede ser menor;
-- el manifest completo tiene un SHA-256 canónico que liga identidad, orden, tamaños y hashes de chunks;
-- no contiene nombre de archivo, base64, texto, imagen ni payload.
+En receptor, un chunk solo debe marcarse completado después de recibirse y verificarse. En emisor, el progreso corresponderá a confirmaciones del receptor. El estado `complete` no sustituye el ACK final de persistencia.
 
-Los 4 MiB son tamaño lógico del Transfer Engine, **no tamaño de frame de red**. Un transporte puede fragmentar un chunk en mensajes menores; por ejemplo, el DataChannel actual puede seguir usando frames de 64 KiB sin cambiar el contrato del motor.
+Gate: CI #119 verde en tests, lint, build, auditoría pública, Web/Worker y Android.
 
-La generación de hashes lee un chunk a la vez, evitando cargar archivos grandes completos en memoria solo para obtener integridad.
+## Checkpoint 2 — persistencia local reanudable
 
-### Journal de progreso
+`src/transfer/transferStateStore.ts` persiste **solo** manifest + journal en IndexedDB local:
 
-`src/transfer/transferJournal.ts` define un journal serializable y transport-agnostic:
+- base separada `oaclix-transfer-engine` y store `operations`;
+- el snapshot acepta únicamente `version`, `type`, `manifest`, `journal` y `savedAt`; cualquier campo extra se rechaza para evitar que el journal se convierta accidentalmente en almacenamiento de contenido;
+- antes de restaurar se verifica el hash completo del manifest y la coherencia del journal;
+- solo estados `prepared` / `transferring` son reanudables; `complete` y `cancelled` no se conservan como trabajo pendiente;
+- estado inactivo por más de 24 h se elimina; una operación de más de 7 días tampoco se restaura;
+- entradas corruptas, vencidas o con key distinta del `transferId` se depuran al leer;
+- existe borrado explícito por transferencia y limpieza total para futuros flujos de unlink/logout;
+- no almacena bytes del archivo dentro del journal.
 
-- queda ligado al `transferId` y al hash exacto del manifest;
-- distingue rol `sender` / `receiver`;
-- guarda progreso como rangos compactos de chunks completados;
-- permite calcular rangos faltantes para reanudar sin empezar desde cero;
-- marcar el mismo chunk otra vez es idempotente;
-- una transferencia no puede pasar a `complete` mientras falte un chunk;
-- el journal no guarda contenido, nombres de archivo ni mensajes de error con datos privados.
-
-Semántica prevista:
-
-- en receptor, “chunk completado” significa que el chunk fue recibido y verificado contra su SHA-256 antes de persistir el progreso;
-- en emisor, “chunk completado” significará que el receptor confirmó ese chunk;
-- el estado `complete` no sustituye el ACK final de almacenamiento: la integración posterior deberá marcar éxito visible solo después de que el receptor haya persistido y verificado todo.
+Esto permite restaurar **el conocimiento del progreso** tras reinicio. No promete todavía que el origen de bytes siga disponible: la siguiente integración debe resolver la referencia segura al contenido local según el tipo de origen, sin copiar archivos dentro del journal.
 
 ## Privacidad y seguridad
 
 - ningún payload nuevo viaja por el WebSocket de control;
-- el manifest contiene únicamente metadata técnica mínima;
+- manifest, journal y snapshot contienen únicamente metadata técnica necesaria;
 - no se introducen secrets, hostnames privados, nombres reales de archivos ni contenido de portapapeles;
 - rige `SECURITY.md` para todo cambio público;
-- un hash sirve para integridad, **no para confidencialidad**. El cifrado E2E de rutas remotas se resolverá en su capa correspondiente.
+- un hash sirve para integridad, no para confidencialidad. El cifrado E2E pertenece a la capa de ruta correspondiente.
 
 ## Costo
 
-Este checkpoint es código local y pruebas. No activa R2, TURN, SFU, almacenamiento cloud nuevo ni servicios facturables.
+Todo lo anterior es lógica y almacenamiento local del dispositivo. No activa R2, TURN, SFU, almacenamiento cloud nuevo ni servicios facturables.
 
 ## No sustituye todavía
 
@@ -67,17 +63,15 @@ Este checkpoint es código local y pruebas. No activa R2, TURN, SFU, almacenamie
 - Android wake/background;
 - selección de ruta.
 
-## Gate del checkpoint 1
+## Gate del checkpoint 2
 
 Debe quedar demostrado que:
 
-1. un blob se describe con chunks y hashes reproducibles sin incluir payload en el manifest;
-2. un byte alterado hace fallar la verificación del chunk;
-3. alterar metadata invalida el hash del manifest;
-4. el journal reanuda desde los rangos faltantes e ignora progreso duplicado;
-5. no se puede declarar una transferencia completa si faltan chunks;
-6. Web/Worker, tests, lint, build, auditoría pública y Android siguen verdes.
+1. un snapshot válido se restaura tras serialización sin contener payload;
+2. metadata extra, manifest alterado o journal no reanudable se rechazan;
+3. estado inactivo/antiguo se depura;
+4. Web/Worker, tests, lint, build, auditoría pública y Android siguen verdes.
 
 ## Siguiente checkpoint exacto
 
-Persistir localmente manifest + journal con limpieza explícita y restauración segura después de reinicio, sin almacenar los bytes del archivo dentro del journal. Después se conectará el `Route Intent` del Paso 1 con la creación de una operación del Transfer Engine, todavía sin reemplazar transportes legacy.
+Conectar el `Route Intent` del Paso 1 con la creación de una operación del Transfer Engine y definir una abstracción de fuente de chunks que permita volver a abrir contenido local tras reinicio cuando el origen lo soporte. Todavía no sustituir ningún transporte legacy ni enviar bytes por el WebSocket de control.
