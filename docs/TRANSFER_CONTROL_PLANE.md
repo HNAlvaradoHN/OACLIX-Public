@@ -1,7 +1,7 @@
 # Plano de control de transferencias — OACLIX
 
 Fecha: 2026-09-15
-Estado: Paso 1 en desarrollo; control online, solicitud offline, disponibilidad separada y handoff `accepted -> Route Intent` implementados en `feat/transfer-control-plane`. PR en draft hasta CI y validación integrada.
+Estado: Paso 1 en desarrollo; control online, solicitud offline, disponibilidad separada, autoaceptación confiable, handoff `accepted -> Route Intent` y retry de control implementados en `feat/transfer-control-plane`. PR en draft hasta CI final y cierre del gate integrado.
 
 ## Objetivo
 
@@ -18,7 +18,7 @@ OACLIX debe permitir enviar a un dispositivo propio ya vinculado sin pedir confi
 - autoaceptar no significa mantener WebRTC ni otro transporte pesado vivo permanentemente;
 - ningún flujo puede autoaceptar un peer que no haya sido autenticado como perteneciente a la misma identidad confiable.
 
-`transferAcceptancePolicy.ts` deja fijada esta frontera: solo un contexto autenticado y marcado como misma identidad confiable puede producir automáticamente `accepted`. El wake de app cerrada todavía no se implementa en este checkpoint.
+`transferAcceptancePolicy.ts` fija esta frontera y `RealtimeSignalClient` solo invoca la autoaceptación después de validar el frame `transfer-control` recibido por la sesión autenticada. El wake del proceso Android cuando la app está cerrada pertenece al paso posterior de background/wake; este plano ya puede conservar la solicitud mientras el receptor está offline.
 
 ## Checkpoint 1 — control online
 
@@ -79,7 +79,17 @@ Este checkpoint cambia el modelo interno, no la UX ni el transporte de datos exi
 - si el emisor reinició/perdió su solicitud local o ya está fuera de vigencia, un `accepted` no produce intent: OACLIX no finge que la transferencia comenzó;
 - el futuro Route Manager se conectará mediante `subscribeTransferRouteIntent()` y decidirá LAN/WebRTC/Wi-Fi Direct/remoto según disponibilidad real.
 
-Este comportamiento resuelve la regla del caso emisor offline a nivel de estado: `accepted` por sí solo nunca equivale a “transfiriendo”. Si el emisor ya no conserva una solicitud viva, debe reintentar/recrear control cuando vuelva a estar disponible; los bytes no se mueven en este checkpoint.
+## Checkpoint 5 — reconexión del emisor sin falso inicio
+
+Si el emisor pierde temporalmente el WebSocket antes de recibir `accepted`:
+
+- las solicitudes salientes todavía vivas permanecen rastreadas en memoria mientras el proceso siga existiendo;
+- cuando `RealtimeSignalClient` recibe un nuevo `ready` autenticado, `retryTrackedTransferRequests()` reenvía solo esas solicitudes vivas;
+- una solicitud vencida se depura y no se reintenta;
+- reintentar conserva el mismo `requestId`, por lo que el control sigue siendo idempotente;
+- si el proceso del emisor fue terminado y perdió el estado en memoria, no se inventa continuidad: una capa durable posterior (Transfer Engine/journal) deberá recrear la operación si corresponde.
+
+Esto resuelve el corte breve de red sin convertir `accepted` en “transfiriendo”. La continuidad durable de bytes pertenece al Transfer Engine, no al plano de control.
 
 ## Privacidad
 
@@ -100,13 +110,18 @@ Fuentes públicas: `https://developers.cloudflare.com/durable-objects/platform/p
 
 Los límites de cola y la expiración corta existen también para evitar consumo innecesario. Si el plan de Cloudflare cambia, estas condiciones deben volver a verificarse antes de activar o ampliar esta función.
 
-## Todavía pendiente dentro del Paso 1
+## Gate para cerrar el Paso 1
 
-1. conectar la política de autoaceptación confiable al flujo autenticado real sin abrir una vía de autoaceptación para peers no confiables;
-2. hacer una prueba integrada del flujo completo `request -> autoaccepted -> route-intent`, todavía sin bytes;
-3. definir el retry de control cuando el emisor desaparece antes de recibir `accepted`;
-4. retirar el relay viejo de contenido por WebSocket únicamente cuando la ruta nueva tenga sustituto probado.
+Antes de declarar el Paso 1 concluido deben quedar verdes las verificaciones que demuestran:
 
-## Siguiente checkpoint exacto
+1. `request -> autoaccepted -> route-intent` produce un único intent y cero bytes por el nuevo plano de control;
+2. un peer no confiable no puede usar la política de autoaceptación;
+3. una respuesta de otro dispositivo, solicitud vencida o emisor sin solicitud viva no inicia nada;
+4. una reconexión reintenta solo solicitudes vivas;
+5. Web/Worker, lint, build, auditoría pública y Android siguen verdes.
 
-Conectar autoaceptación únicamente después de que `RealtimeSignalClient` haya validado que el mensaje llegó por la sesión autenticada de la misma identidad. Después verificar de extremo a extremo que un dispositivo propio recibe `transfer-request`, genera `accepted` internamente y el emisor obtiene un único `route-intent`, sin seleccionar transporte ni mover contenido.
+El relay antiguo de contenido permanece durante la migración y se retirará únicamente cuando los siguientes pasos tengan un transporte sustituto probado. El wake Android con app cerrada también queda explícitamente pendiente para el paso de background/wake; no debe confundirse con un fallo de este contrato de control.
+
+## Siguiente paso exacto
+
+Una vez verde el gate anterior, cerrar el Paso 1 como base del nuevo plano de control y comenzar el Paso 2: Transfer Engine independiente del transporte (manifest/chunks, hashes, journal, retry/resume e integridad), sin conectar todavía grandes payloads al WebSocket de control.
