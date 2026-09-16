@@ -1,7 +1,7 @@
 # Plano de control de transferencias — OACLIX
 
 Fecha: 2026-09-15
-Estado: Paso 1 en desarrollo; checkpoints online + solicitud offline implementados en `feat/transfer-control-plane`, pendientes de CI final y prueba integrada.
+Estado: Paso 1 en desarrollo; control online, solicitud offline y modelo de disponibilidad separados implementados en `feat/transfer-control-plane`. PR en draft hasta CI y validación integrada.
 
 ## Objetivo
 
@@ -32,6 +32,28 @@ Separar la coordinación de una transferencia de los bytes reales. Cloudflare pu
 - al desvincular un dispositivo se eliminan solicitudes donde ese `deviceId` participa;
 - una alarma del Durable Object limpia expirados aunque ningún dispositivo vuelva a abrir la sala.
 
+## Checkpoint 3 — disponibilidad sin mezclar conceptos
+
+`deviceAvailability.ts` mantiene por separado cuatro hechos que antes quedaban comprimidos en una sola etiqueta de ruta:
+
+1. `linked`: el dispositivo existe en el roster autorizado;
+2. `presence`: `unknown`, `online` u `offline` según presence del plano de control;
+3. `dataChannel`: `available` solo cuando existe un canal de datos validado;
+4. `pendingTransfer`: solicitud de transferencia observada y todavía viva.
+
+Reglas:
+
+- estar vinculado no implica estar online;
+- estar online no implica tener DataChannel;
+- tener una solicitud pendiente no crea ni simula un canal de datos;
+- un DataChannel validado puede seguir disponible aunque se pause temporalmente la señalización;
+- solicitudes pendientes locales expiran por `expiresAt` y no contienen bytes;
+- `linkedDeviceAuthorization` publica el roster conocido en este modelo;
+- `lanStatus` publica presence y DataChannel, pero conserva `getDeviceRouteStatus()` como wrapper de compatibilidad para no reescribir la UI de golpe;
+- `transferControlBus` publica/retira el estado pendiente únicamente cuando el mensaje de control fue enviado o recibido.
+
+Este checkpoint cambia el modelo interno, no la UX ni el transporte de datos existente.
+
 ## Privacidad
 
 El plano de control conoce solo lo necesario para coordinar: IDs técnicos, tipo general de contenido, tamaño, timestamps y estado. No debe recibir contenido del portapapeles ni datos privados. Rige además `SECURITY.md`: ningún secreto, hostname privado, endpoint interno, credencial ni contenido real de usuario puede publicarse en el repositorio.
@@ -53,11 +75,11 @@ Los límites de cola y la expiración corta existen también para evitar consumo
 
 ## Todavía pendiente dentro del Paso 1
 
-1. separar explícitamente los estados `dispositivo conocido`, `online`, `solicitud pendiente` y `canal de datos disponible`;
-2. conectar `accepted` con una interfaz mínima para el futuro Route Manager, sin mover bytes todavía;
-3. decidir el comportamiento cuando el receptor responde y el emisor ya está offline; no se debe fingir que la transferencia comenzó;
+1. conectar `accepted` con una interfaz mínima para el futuro Route Manager, sin mover bytes todavía;
+2. decidir el comportamiento cuando el receptor responde y el emisor ya está offline; no se debe fingir que la transferencia comenzó;
+3. hacer una prueba integrada del flujo de control completo;
 4. retirar el relay viejo de contenido por WebSocket únicamente cuando la ruta nueva tenga sustituto probado.
 
 ## Siguiente checkpoint exacto
 
-Crear un modelo de estado independiente que no confunda que un dispositivo esté vinculado/online con que exista un canal de datos. Después, `accepted` entregará una intención al futuro Route Manager; todavía sin cambiar el transporte real.
+Crear el handoff mínimo `accepted -> Route Intent`: el plano de control solo avisará que una transferencia fue aceptada y qué par de dispositivos participa. El futuro Route Manager decidirá el transporte; este checkpoint todavía no moverá contenido ni cambiará el relay viejo.

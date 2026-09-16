@@ -1,3 +1,13 @@
+import {
+  clearRealtimeOnlineState,
+  getDeviceAvailabilityState,
+  hasAnyAvailableDataChannel,
+  isRoomRealtimePresenceKnown,
+  legacyRouteStatusFromAvailability,
+  publishDataChannelDeviceIds,
+  publishRealtimeOnlineDeviceIds,
+} from './deviceAvailability'
+
 export type DeviceRouteStatus = 'direct' | 'cloud' | 'offline' | 'checking'
 
 export type LanPeerDiagnostic = {
@@ -20,44 +30,20 @@ export type LanPeerDiagnostic = {
   updatedAt: number
 }
 
-const directPeerIdsByRoom = new Map<string, Set<string>>()
-const presentDeviceIdsByRoom = new Map<string, Set<string>>()
-const presenceKnownRooms = new Set<string>()
 const presenceRevisionsByRoom = new Map<string, number>()
 const diagnosticsByRoom = new Map<string, Map<string, LanPeerDiagnostic>>()
 const listeners = new Set<() => void>()
-
-function sameIds(current: Set<string> | undefined, next: Set<string>) {
-  if (!current || current.size !== next.size) return false
-  for (const value of next) {
-    if (!current.has(value)) return false
-  }
-  return true
-}
 
 function notify() {
   for (const listener of listeners) listener()
 }
 
-function publishIds(target: Map<string, Set<string>>, roomId: string, deviceIds: string[]) {
-  const normalized = new Set(deviceIds)
-  const current = target.get(roomId)
-  if (sameIds(current, normalized)) return false
-
-  if (normalized.size === 0) target.delete(roomId)
-  else target.set(roomId, normalized)
-  return true
-}
-
 export function hasDirectLanPeer() {
-  for (const deviceIds of directPeerIdsByRoom.values()) {
-    if (deviceIds.size > 0) return true
-  }
-  return false
+  return hasAnyAvailableDataChannel()
 }
 
 export function isRealtimePresenceKnown(roomId: string) {
-  return presenceKnownRooms.has(roomId)
+  return isRoomRealtimePresenceKnown(roomId)
 }
 
 export function getRealtimePresenceRevision(roomId: string) {
@@ -65,10 +51,7 @@ export function getRealtimePresenceRevision(roomId: string) {
 }
 
 export function getDeviceRouteStatus(roomId: string, deviceId: string): DeviceRouteStatus {
-  if (directPeerIdsByRoom.get(roomId)?.has(deviceId)) return 'direct'
-  if (!presenceKnownRooms.has(roomId)) return 'checking'
-  if (presentDeviceIdsByRoom.get(roomId)?.has(deviceId)) return 'cloud'
-  return 'offline'
+  return legacyRouteStatusFromAvailability(getDeviceAvailabilityState(roomId, deviceId))
 }
 
 export function getLanPeerDiagnostic(roomId: string, deviceId: string) {
@@ -97,12 +80,11 @@ export function subscribeDirectLanStatus(listener: () => void) {
 }
 
 export function publishDirectLanPeerIds(roomId: string, deviceIds: string[]) {
-  if (publishIds(directPeerIdsByRoom, roomId, deviceIds)) notify()
+  if (publishDataChannelDeviceIds(roomId, deviceIds)) notify()
 }
 
 export function publishRealtimePresence(roomId: string, deviceIds: string[]) {
-  presenceKnownRooms.add(roomId)
-  publishIds(presentDeviceIdsByRoom, roomId, deviceIds)
+  publishRealtimeOnlineDeviceIds(roomId, deviceIds)
   presenceRevisionsByRoom.set(roomId, getRealtimePresenceRevision(roomId) + 1)
   // Cada frame de presence es un hint autoritativo del servidor. Aunque los IDs
   // online sean iguales, puede representar un cambio de vínculo de un equipo offline.
@@ -110,7 +92,5 @@ export function publishRealtimePresence(roomId: string, deviceIds: string[]) {
 }
 
 export function clearRealtimePresence(roomId: string) {
-  const wasKnown = presenceKnownRooms.delete(roomId)
-  const hadPresence = presentDeviceIdsByRoom.delete(roomId)
-  if (wasKnown || hadPresence) notify()
+  if (clearRealtimeOnlineState(roomId)) notify()
 }

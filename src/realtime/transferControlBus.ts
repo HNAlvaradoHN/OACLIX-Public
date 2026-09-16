@@ -1,4 +1,5 @@
 import type { TransferControlMessage } from '../shared/transferControlProtocol'
+import { applyTransferControlAvailability } from './deviceAvailability'
 
 type TransferControlListener = (message: TransferControlMessage, remoteDeviceId: string) => void
 type TransferControlSender = (targetDeviceId: string, message: TransferControlMessage) => boolean
@@ -15,7 +16,9 @@ export function sendTransferControl(
   targetDeviceId: string,
   message: TransferControlMessage,
 ) {
-  return sendersByRoom.get(roomId)?.(targetDeviceId, message) ?? false
+  const sent = sendersByRoom.get(roomId)?.(targetDeviceId, message) ?? false
+  if (sent) applyTransferControlAvailability(roomId, targetDeviceId, message)
+  return sent
 }
 
 export function subscribeTransferControl(
@@ -39,6 +42,7 @@ export function publishTransferControl(
   message: TransferControlMessage,
   remoteDeviceId: string,
 ) {
+  applyTransferControlAvailability(roomId, remoteDeviceId, message)
   for (const listener of listenersByRoom.get(roomId) ?? []) {
     listener(message, remoteDeviceId)
   }
