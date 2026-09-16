@@ -1,8 +1,8 @@
 import {
   LOCAL_IMAGE_RETENTION_MS,
   type LocalImageTransferItem,
-} from '../shared/localImageTransferCore'
-import { decodeImageTransferBytes } from '../realtime/localImageTransfer'
+} from '../shared/localImageTransferCore.ts'
+import { decodeImageTransferBytes } from '../realtime/localImageTransfer.ts'
 
 const DATABASE_NAME = 'oaclix-local-images'
 const STORE_NAME = 'image-items'
