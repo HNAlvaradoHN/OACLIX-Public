@@ -170,7 +170,10 @@ export function createLocalTransferProductBoundary(
       return
     }
 
-    if (message.cancelledByDeviceId === remoteDeviceId) {
+    if (
+      message.type === 'transfer-cancel'
+      && message.cancelledByDeviceId === remoteDeviceId
+    ) {
       rejectPending(request.requestId, new Error('La transferencia fue cancelada'))
     }
   })
@@ -236,7 +239,7 @@ export function createLocalTransferProductBoundary(
     disconnectCoordinator()
     disconnectControl()
     clearPendingTransferSources(roomId)
-    for (const requestId of [...pendingByRequest.keys()]) {
+    for (const requestId of Array.from(pendingByRequest.keys())) {
       rejectPending(requestId, new Error('La frontera de transferencia se desconectó'))
     }
   }
