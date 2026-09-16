@@ -72,13 +72,15 @@ export function queuePendingTransferRequest(
 
 export function removePendingTransferRequest(
   current: PendingTransferRequestRecord[],
+  personId: string,
   requestId: string,
   senderDeviceId: string,
   receiverDeviceId: string,
   now: number,
 ) {
   return normalizePendingTransferRequests(current, now).filter((record) => !(
-    record.message.requestId === requestId
+    record.personId === personId
+    && record.message.requestId === requestId
     && record.message.senderDeviceId === senderDeviceId
     && record.message.receiverDeviceId === receiverDeviceId
   ))
@@ -98,12 +100,13 @@ export function pendingTransferRequestsForDevice(
 
 export function removePendingTransferRequestsForDevice(
   current: PendingTransferRequestRecord[],
+  personId: string,
   deviceId: string,
   now: number,
 ) {
-  return normalizePendingTransferRequests(current, now).filter((record) => (
-    record.message.senderDeviceId !== deviceId
-    && record.message.receiverDeviceId !== deviceId
+  return normalizePendingTransferRequests(current, now).filter((record) => !(
+    record.personId === personId
+    && (record.message.senderDeviceId === deviceId || record.message.receiverDeviceId === deviceId)
   ))
 }
 
