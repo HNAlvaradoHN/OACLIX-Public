@@ -76,6 +76,26 @@ export function trackSentTransferControl(
   return false
 }
 
+export function listRetryableTrackedTransferRequests(
+  roomId: string,
+  now = Date.now(),
+) {
+  if (!Number.isSafeInteger(now) || now <= 0) return []
+  const room = outgoingRequestsByRoom.get(roomId)
+  if (!room) return []
+
+  const retryable: TransferControlRequest[] = []
+  for (const [requestId, request] of room) {
+    if (request.expiresAt <= now) {
+      room.delete(requestId)
+      continue
+    }
+    retryable.push({ ...request })
+  }
+  if (room.size === 0) outgoingRequestsByRoom.delete(roomId)
+  return retryable
+}
+
 export function observeReceivedTransferControlForRouteIntent(
   roomId: string,
   remoteDeviceId: string,
