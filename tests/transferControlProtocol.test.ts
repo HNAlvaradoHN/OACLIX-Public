@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  TRANSFER_REQUEST_MAX_CLOCK_SKEW_MS,
   TRANSFER_REQUEST_MAX_TTL_MS,
+  transferControlRequestIsLive,
   validTransferControlForRoute,
 } from '../src/shared/transferControlProtocol.ts'
 import { parseTransferControlInput } from '../worker/realtime/transferControlProtocol.ts'
@@ -56,12 +58,20 @@ test('rechaza identidad invertida, autoenvío y metadatos usados para tunelar pa
   }, senderDeviceId), null)
 })
 
-test('limita vigencia y tamaño lógico de la solicitud', () => {
+test('limita vigencia, reloj y tamaño lógico de la solicitud', () => {
   assert.equal(validTransferControlForRoute({
     ...request,
     expiresAt: request.createdAt + TRANSFER_REQUEST_MAX_TTL_MS + 1,
   }, senderDeviceId, receiverDeviceId), false)
   assert.equal(validTransferControlForRoute({ ...request, byteSize: -1 }, senderDeviceId, receiverDeviceId), false)
+
+  assert.equal(transferControlRequestIsLive(request, createdAt), true)
+  assert.equal(transferControlRequestIsLive({ ...request, expiresAt: createdAt }, createdAt), false)
+  assert.equal(transferControlRequestIsLive({
+    ...request,
+    createdAt: createdAt + TRANSFER_REQUEST_MAX_CLOCK_SKEW_MS + 1,
+    expiresAt: createdAt + TRANSFER_REQUEST_MAX_CLOCK_SKEW_MS + 1 + TRANSFER_REQUEST_MAX_TTL_MS,
+  }, createdAt), false)
 })
 
 test('solo el receptor decide y la decisión vuelve al emisor original', () => {
