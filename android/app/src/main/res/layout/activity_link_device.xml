@@ -39,11 +39,19 @@
             android:textSize="14sp" />
 
         <Button
-            android:id="@+id/generate_link_code_button"
+            android:id="@+id/configure_connection_button"
             style="@style/Widget.Oaclix.Button.Secondary"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="18dp"
+            android:text="@string/share_configure_connection" />
+
+        <Button
+            android:id="@+id/generate_link_code_button"
+            style="@style/Widget.Oaclix.Button.Secondary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
             android:text="@string/link_generate_code" />
 
         <TextView
