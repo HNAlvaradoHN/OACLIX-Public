@@ -103,3 +103,22 @@ jobs:
       - name: Test and assemble Android
         working-directory: android
         run: ./gradlew testDebugUnitTest assembleDebug --no-daemon
+
+      - name: Prepare debug APK artifact
+        if: github.ref == 'refs/heads/main'
+        working-directory: android
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifact
+          cp app/build/outputs/apk/debug/app-debug.apk artifact/OACLIX-debug.apk
+          sha256sum artifact/OACLIX-debug.apk > artifact/OACLIX-debug.apk.sha256
+
+      - name: Upload debug APK artifact
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: oaclix-android-debug
+          path: android/artifact/
+          if-no-files-found: error
+          retention-days: 1
