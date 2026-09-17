@@ -173,6 +173,10 @@ Si una pieza añade complejidad sin acercar al usuario a:
 - El antiguo siguiente paso "Checkpoint 11: migrar imagen local a Transfer Engine" queda cancelado como siguiente paso oficial.
 - No fusionar automáticamente ramas o PR históricos porque estén verdes; primero decidir qué piezas siguen siendo útiles para el nuevo MVP.
 - Documentación antigua que exista dentro de ramas históricas es solo historial y no puede reemplazar esta fuente de verdad.
+- Etapa B inició en PR #13 (`feat/native-direct-text-stage-b`) desde `main` `f51883cbe93d36db9df770565695a98fe5a944c3`.
+- La auditoría de reutilización para texto está cerrada en `docs/STAGE_B_TEXT_AUDIT.md`: identidad/vinculación, roster, almacenamiento local, Android Clipboard y señalización técnica se reutilizan; las rutas de contenido por D1/WebSocket cloud no continúan como transporte del nuevo flujo.
+- PR #13 define dos contratos separados: `NativeDirectSignalProtocol` para metadata de presencia/SDP/ICE y `NativeDirectTextProtocol` para payload/ACK destinado exclusivamente al DataChannel.
+- CI #159 sobre PR #13 quedó verde en Web/Worker y Android, incluido `testDebugUnitTest` + `assembleDebug`.
 
 ## 11. Nuevo MVP
 
@@ -190,21 +194,21 @@ Primero debe funcionar un flujo vertical real antes de ampliar la interfaz o añ
 
 ## 12. Siguiente paso exacto
 
-La Etapa A ya está cerrada y verificada. El siguiente bloque es **Etapa B: primer flujo real de texto dispositivo-a-dispositivo**.
+La Etapa A está cerrada. En Etapa B ya quedó cerrada y verificada la auditoría del primer flujo de texto y quedaron definidos los contratos de señalización metadata-only y de payload/ACK directo.
 
-Antes de modificar transporte, auditar únicamente las piezas existentes necesarias para ese flujo y clasificar cada una como `reutilizar`, `adaptar` o `eliminar/no continuar`.
+El siguiente checkpoint exacto es **construir el peer nativo LAN específico de texto**:
 
-Después implementar, en pequeños checkpoints verificables:
+1. partir del `main` que resulte después de integrar PR #13 y volver a comprobar trabajo paralelo;
+2. añadir WebRTC con verificación de dependencia intacta; no desactivar controles de Gradle;
+3. usar inicialmente `iceServers = []` para demostrar conexión LAN directa sin TURN/relay;
+4. usar el backend existente únicamente para presencia + SDP/ICE de `NativeDirectSignalProtocol`;
+5. enviar `NativeDirectTextProtocol` únicamente por DataChannel; nunca por el WebSocket cloud;
+6. en el receptor, validar y guardar en `LocalClipboardHistory`, después copiar con `OaclixClipboardBridge`, y solo entonces responder ACK `stored`;
+7. el emisor no declara éxito sin ese ACK real;
+8. después de probar el peer por código/CI, conectar el selector ya existente del Android Share Sheet;
+9. cerrar el bloque con gate físico entre dos Android en la misma LAN.
 
-1. Android Share Sheet recibe texto y muestra los dispositivos vinculados como destinos reales;
-2. al elegir un dispositivo, preparar una transferencia directa sin almacenar el contenido en nube;
-3. priorizar conexión LAN directa y reutilizar piezas de DataChannel/seguridad solo si encajan limpiamente con el nuevo flujo;
-4. el receptor guarda el texto localmente antes de confirmar éxito;
-5. el texto recibido queda disponible en Android Clipboard para pegar;
-6. el emisor solo muestra éxito después de un ACK real del receptor;
-7. probar extremo a extremo entre dos dispositivos reales.
-
-No exponer todavía envío desde las tarjetas locales hasta que este mismo contrato directo esté demostrado extremo a extremo. No construir panel lateral, archivos genéricos, favoritos ni accesos directos a apps antes de esa prueba.
+No exponer todavía envío desde las tarjetas locales hasta que este mismo contrato directo esté demostrado extremo a extremo. No incluir todavía imágenes, archivos genéricos, favoritos, panel, TURN ni relay de contenido.
 
 ## 13. Regla para futuros chats
 
@@ -241,13 +245,14 @@ Leyenda: `✅` hecho y verificado en su etapa; `⏳` en desarrollo o pendiente d
 
 ### Etapa B — primer flujo real dispositivo a dispositivo
 
-- ⏳ Auditar piezas reutilizables de vinculación, LAN/DataChannel, integridad y recepción sin recuperar el roadmap viejo.
-- ⬜ Texto desde Android Share Sheet → elegir dispositivo vinculado.
-- ⬜ Transferencia directa LAN sin almacenar contenido en nube.
+- ✅ Auditoría de vinculación, señalización, LAN/DataChannel, almacenamiento y recepción cerrada en PR #13.
+- ✅ Contratos separados para señalización metadata-only y texto/ACK directo definidos y verificados por CI #159.
+- ⏳ Peer nativo LAN de texto sobre DataChannel, sin payload cloud.
+- ⬜ Texto desde Android Share Sheet → elegir dispositivo vinculado → usar el peer directo.
 - ⬜ Receptor guarda localmente antes de confirmar éxito.
 - ⬜ Texto recibido queda en Android Clipboard listo para pegar.
 - ⬜ Emisor muestra éxito solo después del ACK real del receptor.
-- ⬜ Probar el flujo entre dos dispositivos reales.
+- ⬜ Probar el flujo entre dos dispositivos Android reales en la misma LAN.
 
 ### Etapa C — ampliar el mismo contrato sin duplicar arquitectura
 
