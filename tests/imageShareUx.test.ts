@@ -28,12 +28,13 @@ test('visible PWA keeps linked-image reception alive without turning local-only 
   assert.match(main, /<ForegroundLinkedImageReceiver \/>/)
 })
 
-test('Android share selector is compact, previews the incoming URI and distinguishes repeated device names', async () => {
-  const [layout, preview, presentation, strings] = await Promise.all([
+test('Android share selector is compact, previews the incoming URI and keeps images local-only', async () => {
+  const [layout, preview, presentation, strings, receiver] = await Promise.all([
     read('android/app/src/main/res/layout/activity_share_receiver.xml'),
     read('android/app/src/main/java/app/oaclix/android/imageclipboard/SharedImagePreviewView.kt'),
     read('android/app/src/main/java/app/oaclix/android/share/NativeShareDestinationPresentation.kt'),
     read('android/app/src/main/res/values/strings.xml'),
+    read('android/app/src/main/java/app/oaclix/android/ShareReceiverActivity.kt'),
   ])
 
   assert.match(layout, /SharedImagePreviewView/)
@@ -48,5 +49,8 @@ test('Android share selector is compact, previews the incoming URI and distingui
 
   assert.match(presentation, /repeatedLinkedLabels/)
   assert.match(presentation, /shortDeviceTag/)
-  assert.match(strings, /share_destination_image_devices_ready">Dispositivos vinculados disponibles · imágenes por Nube\./)
+  assert.match(strings, /share_destination_image_local_only">Las imágenes se guardan localmente por ahora\./)
+  assert.match(strings, /share_image_meta">Se guardará solo en este dispositivo</)
+  assert.doesNotMatch(strings, /share_destination_image_devices_ready|imágenes por Nube/)
+  assert.doesNotMatch(receiver, /· Nube|sendImageDevice|NativeImageDeviceShareTransport/)
 })
