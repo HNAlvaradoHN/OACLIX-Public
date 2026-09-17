@@ -5,6 +5,7 @@ import android.app.AlertDialog
 import android.graphics.Typeface
 import android.os.Bundle
 import android.text.InputFilter
+import android.text.InputType
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
@@ -24,6 +25,7 @@ class LinkDeviceActivity : Activity() {
     private lateinit var linkButton: Button
     private lateinit var generateCodeButton: Button
     private lateinit var refreshButton: Button
+    private lateinit var configureConnectionButton: Button
     private lateinit var generatedCode: TextView
     private lateinit var devicesContainer: LinearLayout
     private lateinit var status: TextView
@@ -42,11 +44,25 @@ class LinkDeviceActivity : Activity() {
         linkButton = findViewById(R.id.link_device_button)
         generateCodeButton = findViewById(R.id.generate_link_code_button)
         refreshButton = findViewById(R.id.refresh_linked_devices_button)
+        configureConnectionButton = findViewById(R.id.configure_connection_button)
         generatedCode = findViewById(R.id.generated_link_code)
         devicesContainer = findViewById(R.id.linked_devices_container)
         status = findViewById(R.id.link_status)
         currentDeviceId = identity.getOrCreateSnapshot().deviceId
 
+        configureConnectionButton.setOnClickListener { showConnectionDialog() }
+        linkButton.setOnClickListener { consumeCode() }
+        generateCodeButton.setOnClickListener { generateCode() }
+        refreshButton.setOnClickListener { loadRoster(announce = true) }
+        configureFlow(loadRoster = true)
+    }
+
+    override fun onDestroy() {
+        if (::ioExecutor.isInitialized) ioExecutor.shutdown()
+        super.onDestroy()
+    }
+
+    private fun configureFlow(loadRoster: Boolean) {
         val baseUrl = NativeBackendConfig.resolve(this)
         if (baseUrl.isBlank()) {
             status.setText(R.string.link_connection_required)
@@ -55,15 +71,35 @@ class LinkDeviceActivity : Activity() {
         }
 
         flow = NativeLinkingFlow(baseUrl, identity)
-        linkButton.setOnClickListener { consumeCode() }
-        generateCodeButton.setOnClickListener { generateCode() }
-        refreshButton.setOnClickListener { loadRoster(announce = true) }
-        loadRoster(announce = false)
+        setControlsEnabled(true)
+        if (loadRoster) loadRoster(announce = false)
     }
 
-    override fun onDestroy() {
-        if (::ioExecutor.isInitialized) ioExecutor.shutdown()
-        super.onDestroy()
+    private fun showConnectionDialog() {
+        if (busy) return
+        val input = EditText(this).apply {
+            hint = getString(R.string.share_connection_hint)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            setSingleLine(true)
+            setText(NativeBackendConfig.resolve(this@LinkDeviceActivity))
+            setSelection(text.length)
+            setPadding(dp(20), dp(8), dp(20), dp(8))
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle(R.string.share_connection_title)
+            .setMessage(R.string.share_connection_message)
+            .setView(input)
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.share_connection_save) { _, _ ->
+                try {
+                    NativeBackendConfig.save(this, input.text.toString())
+                    configureFlow(loadRoster = true)
+                } catch (error: IllegalArgumentException) {
+                    status.text = error.message ?: getString(R.string.link_error)
+                }
+            }
+            .show()
     }
 
     private fun consumeCode() {
