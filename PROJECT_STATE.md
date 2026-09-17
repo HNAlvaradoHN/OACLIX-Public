@@ -120,6 +120,7 @@ Los identificadores y mecanismos internos de coordinación no deben convertirse 
 - No hay TURN, relay pagado ni fallback cloud de contenido en el flujo Android directo.
 - El Android foreground debe tener **una sola sesión realtime por dispositivo**, para evitar que sockets concurrentes compitan por presencia/señales.
 - El WebSocket de esa sesión solo puede emitir frames `signal` válidos de SDP/ICE; no debe transportar texto ni ACK.
+- Los `.txt` locales largos compartidos hacia otras apps se exponen únicamente mediante un `ContentProvider` de solo lectura, con URI temporal y validación estricta del archivo local permitido.
 
 `SECURITY.md` sigue siendo aplicable cuando no contradiga esta dirección.
 
@@ -151,7 +152,10 @@ La Etapa A incluye:
 - dispositivos vinculados visibles;
 - texto e imágenes locales;
 - copiar, compartir mediante share sheet nativo y eliminar;
-- botón `Agregar` para texto, portapapeles, imagen y vinculación.
+- botón `Agregar` para escribir texto, guardar portapapeles y elegir imagen;
+- vinculación accesible desde la interfaz principal sin duplicarla dentro de `Agregar`;
+- Photo Picker nativo en Android 13+ y selector de galería compatible en Android anteriores soportados;
+- textos locales mayores de 8.000 caracteres almacenados como `.txt` privado hasta 384 KB y compartidos a otras apps como archivo `.txt` real.
 
 ### Etapa B — contratos, peer y conexión al flujo real
 
@@ -162,6 +166,10 @@ La Etapa A incluye:
 - PR #15 conectó el peer al flujo Android real y quedó integrado mediante `6e563c7d9b697fa572695bb9b0d2c5597117b176`.
 - CI #187 verificó el head final de PR #15 en Web/Worker y Android.
 - CI #188 verificó el `main` posterior al merge de PR #15 en Web/Worker y Android, incluido `testDebugUnitTest + assembleDebug`.
+- PR #16 hizo recuperable el APK debug verificado desde builds exitosos de `main`, con retención corta y SHA-256; integrado mediante `f0ca6d1f3606e0cef83a718225ee6a7633957010`.
+- CI #191 verificó PR #16 en `main` y publicó el primer artefacto APK de ese flujo.
+- PR #17 pulió la experiencia local observada durante la prueba: Photo Picker/galería, eliminación de la vinculación duplicada en `Agregar` y compartir texto largo como `.txt`; integrado mediante `22b959ee00912b33778cdc4b4f5f2b0d60e12c98`.
+- CI #192 verificó el head final de PR #17 y CI #193 verificó el `main` posterior al merge, incluido `testDebugUnitTest + assembleDebug` y publicación del APK.
 
 No hay PR abiertos al cerrar este checkpoint.
 
@@ -179,11 +187,22 @@ El flujo Android de texto directo ya está integrado en `main`:
 - las imágenes del Share Sheet quedan locales hasta implementar imagen directa;
 - se eliminaron transportes Android de payload cloud y helpers huérfanos relacionados.
 
-Último checkpoint integrado y verificado por CI antes de este cierre documental:
+La experiencia local Android integrada además incluye:
 
-- `main`: `6e563c7d9b697fa572695bb9b0d2c5597117b176`.
-- CI post-merge: #188, Web/Worker ✅ y Android ✅.
-- La prueba física de dos Android en la misma LAN **todavía no se ha realizado**.
+- `Agregar` sin la acción duplicada de vinculación;
+- selección de imágenes mediante Photo Picker en Android 13+ y selector visual compatible en versiones anteriores soportadas;
+- texto local de hasta 8.000 caracteres almacenado inline;
+- texto local mayor de 8.000 caracteres almacenado completo como `.txt` privado, con límite actual de 384 KB;
+- al compartir hacia otra app, el texto largo se entrega como archivo `.txt` de solo lectura con permiso URI temporal;
+- el envío directo dispositivo-a-dispositivo de texto **sigue limitado a 8.000 caracteres** y el `.txt` grande no forma parte todavía del protocolo directo.
+
+Último checkpoint funcional integrado y verificado:
+
+- checkpoint funcional de `main`: `22b959ee00912b33778cdc4b4f5f2b0d60e12c98`.
+- CI post-merge: #193, Web/Worker ✅ y Android ✅, incluido APK debug publicado.
+- PR abiertos: 0.
+- Desarrollo activo paralelo: ninguno.
+- La prueba física de dos Android en la misma LAN **todavía no se ha completado**.
 
 Por tanto, el código está integrado y compilado, pero el primer MVP dispositivo-a-dispositivo todavía no debe declararse físicamente probado.
 
@@ -211,14 +230,15 @@ El siguiente checkpoint de producto es **prueba física de texto entre dos Andro
 
 Orden de ejecución:
 
-1. obtener/instalar una APK construida desde el `main` integrado actual en ambos Android de prueba;
+1. instalar una APK construida desde el checkpoint funcional integrado actual en ambos Android de prueba;
 2. confirmar que ambos dispositivos siguen vinculados y aparecen como destinos;
 3. mantener ambos Android en la misma LAN y con OACLIX en foreground para este gate;
 4. desde una app externa, compartir un texto hacia OACLIX en el emisor;
 5. elegir el otro dispositivo;
 6. comprobar recepción local, Android Clipboard y ACK de éxito;
 7. repetir al menos en sentido inverso;
-8. si falla, reproducir el problema, identificar la causa real y corregirla antes de ampliar alcance.
+8. comprobar además en la APK actual el Photo Picker y que un texto local >8.000 caracteres se comparta hacia otra app como `.txt`;
+9. si falla, reproducir el problema, identificar la causa real y corregirla antes de ampliar alcance.
 
 No comenzar imágenes directas, archivos genéricos, envío desde tarjetas, P2P entre redes, panel, TURN ni relay de contenido hasta cerrar este gate físico.
 
@@ -232,7 +252,9 @@ Leyenda: `✅` hecho y verificado por código/CI; `⏳` activo o pendiente de ve
 - ✅ Pantalla principal nativa y dispositivos vinculados.
 - ✅ Texto e imágenes locales como tarjetas.
 - ✅ Copiar, compartir a otras apps y eliminar localmente.
-- ✅ Flujo `Agregar`.
+- ✅ Flujo `Agregar` sin vinculación duplicada.
+- ✅ Photo Picker/galería para elegir imágenes sin acceso general al almacenamiento.
+- ✅ Texto local largo guardado completo como `.txt` hasta 384 KB y compartido hacia otras apps como archivo `.txt`.
 - ✅ PR #10 + cierre documental PR #11 integrados y verificados.
 
 ### Etapa B — primer flujo real dispositivo a dispositivo
@@ -245,6 +267,8 @@ Leyenda: `✅` hecho y verificado por código/CI; `⏳` activo o pendiente de ve
 - ✅ Texto recibido se copia a Android Clipboard antes del ACK.
 - ✅ Emisor completa éxito solo con ACK `stored`.
 - ✅ PR #15 integrado y `main` verificado por CI #188.
+- ✅ PR #16 publica APK debug de `main` con SHA-256 y retención corta.
+- ✅ PR #17 integrado y verificado por CI #193.
 - ⏳ Probar físicamente el flujo completo entre dos Android reales en la misma LAN.
 
 ### Etapa C — ampliar el mismo contrato
