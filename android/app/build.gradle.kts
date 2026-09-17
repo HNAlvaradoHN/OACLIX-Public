@@ -54,6 +54,7 @@ android {
 
 dependencies {
     implementation("com.squareup.okhttp3:okhttp:5.3.0")
+    implementation("io.github.webrtc-sdk:android-prefixed-stripped:150.7871.01")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20260814")
