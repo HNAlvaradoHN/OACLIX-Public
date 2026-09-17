@@ -41,11 +41,12 @@ object NativeBackendConfig {
         }
 
         if (!uri.scheme.equals("https", ignoreCase = true)) return null
-        if (uri.host.isNullOrBlank()) return null
+        val host = uri.host?.takeIf { it.isNotBlank() } ?: return null
+        if (host.equals("invalid", ignoreCase = true) || host.endsWith(".invalid", ignoreCase = true)) return null
         if (uri.userInfo != null || uri.query != null || uri.fragment != null) return null
         if (uri.path.isNotEmpty() && uri.path != "/") return null
 
         val port = if (uri.port == -1) "" else ":${uri.port}"
-        return "https://${uri.host.lowercase()}$port"
+        return "https://${host.lowercase()}$port"
     }
 }

@@ -22,7 +22,7 @@ android {
             "string",
             "oaclix_api_base_url",
             providers.gradleProperty("OACLIX_API_BASE_URL")
-                .orElse("https://oaclix.invalid")
+                .orElse("")
                 .get(),
         )
     }

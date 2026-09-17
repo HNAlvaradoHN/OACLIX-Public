@@ -25,7 +25,8 @@ test('la base Android usa un SDK estable actual y limita red al bloque de identi
   assert.match(appBuild, /applicationIdSuffix = "\.dev"/)
   assert.match(appBuild, /versionNameSuffix = "-dev"/)
   assert.match(appBuild, /gradleProperty\("OACLIX_API_BASE_URL"\)/)
-  assert.match(appBuild, /orElse\("https:\/\/oaclix\.invalid"\)/)
+  assert.match(appBuild, /orElse\(""\)/)
+  assert.doesNotMatch(appBuild, /oaclix\.invalid/)
   assert.match(manifest, /android:allowBackup="false"/)
   assert.match(manifest, /android\.permission\.INTERNET/)
   assert.match(manifest, /android:usesCleartextTraffic="false"/)
@@ -33,6 +34,21 @@ test('la base Android usa un SDK estable actual y limita red al bloque de identi
   assert.match(identityApi, /startsWith\("https:\/\/"\)/)
   assert.doesNotMatch(localActivity, /NativeIdentityApi|HttpURLConnection|java\.net\./)
   assert.doesNotMatch(shareReceiver, /NativeIdentityApi|HttpURLConnection|java\.net\./)
+})
+
+test('Vinculados permite configurar backend sin usar un host inválido', async () => {
+  const [config, activity, layout, strings] = await Promise.all([
+    readAndroid('app/src/main/java/app/oaclix/android/connection/NativeBackendConfig.kt'),
+    readAndroid('app/src/main/java/app/oaclix/android/LinkDeviceActivity.kt'),
+    readAndroid('app/src/main/res/layout/activity_link_device.xml'),
+    readAndroid('app/src/main/res/values/strings.xml'),
+  ])
+  assert.match(config, /host\.endsWith\("\.invalid", ignoreCase = true\)/)
+  assert.match(activity, /configureConnectionButton = findViewById\(R\.id\.configure_connection_button\)/)
+  assert.match(activity, /NativeBackendConfig\.save\(this, input\.text\.toString\(\)\)/)
+  assert.match(activity, /configureFlow\(loadRoster = true\)/)
+  assert.match(layout, /@\+id\/configure_connection_button/)
+  assert.match(strings, /name="link_connection_required">Configura la conexión de OACLIX para vincular dispositivos\./)
 })
 
 test('el Gradle Wrapper Android queda fijado y verificable', async () => {
