@@ -9,6 +9,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.MediaStore
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
@@ -91,7 +92,7 @@ class MainActivity : Activity() {
         super.onDestroy()
     }
 
-    @Deprecated("Deprecated in Android; retained for the small local picker until Activity Result is introduced.")
+    @Deprecated("Deprecated in Android; retained for the small local photo picker until Activity Result is introduced.")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode != PICK_IMAGE_REQUEST || resultCode != RESULT_OK) return
@@ -108,7 +109,6 @@ class MainActivity : Activity() {
             getString(R.string.home_add_write_text),
             getString(R.string.home_add_clipboard),
             getString(R.string.home_add_image),
-            getString(R.string.home_add_link_device),
         )
         AlertDialog.Builder(this)
             .setTitle(R.string.home_add_content)
@@ -117,7 +117,6 @@ class MainActivity : Activity() {
                     0 -> showWriteTextDialog()
                     1 -> saveFromSystemClipboard()
                     2 -> chooseImage()
-                    3 -> openLinkedDevices()
                 }
             }
             .setNegativeButton(R.string.cancel, null)
@@ -158,9 +157,14 @@ class MainActivity : Activity() {
     }
 
     private fun chooseImage() {
-        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            type = "image/*"
+        val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Intent(MediaStore.ACTION_PICK_IMAGES).apply {
+                type = "image/*"
+            }
+        } else {
+            Intent(Intent.ACTION_PICK).apply {
+                setDataAndType(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, "image/*")
+            }
         }
         @Suppress("DEPRECATION")
         startActivityForResult(intent, PICK_IMAGE_REQUEST)
@@ -347,16 +351,27 @@ class MainActivity : Activity() {
     }
 
     private fun shareTextItem(item: LocalClipboardEntry) {
-        runStorage(
-            task = { history.read(item) },
-            onSuccess = ::shareText,
-        )
+        when (item) {
+            is LocalClipboardEntry.Inline -> shareText(item.item.text)
+            is LocalClipboardEntry.TextFile -> shareTextFile(item)
+        }
     }
 
     private fun shareText(text: String) {
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, text)
+        }
+        startActivity(Intent.createChooser(intent, getString(R.string.share_out_title)))
+    }
+
+    private fun shareTextFile(item: LocalClipboardEntry.TextFile) {
+        val uri = history.contentUri(item)
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            clipData = ClipData.newUri(contentResolver, getString(R.string.app_name), uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         startActivity(Intent.createChooser(intent, getString(R.string.share_out_title)))
     }
