@@ -24,13 +24,9 @@ import android.widget.TextView
 import android.widget.Toast
 import app.oaclix.android.connection.NativeBackendConfig
 import app.oaclix.android.imageclipboard.ImageClipboardStore
-import app.oaclix.android.imageclipboard.ImageCloudCopyPreparer
 import app.oaclix.android.localclipboard.LargeTextFileStore
 import app.oaclix.android.localclipboard.LocalClipboardHistory
 import app.oaclix.android.localclipboard.LocalClipboardPolicy
-import app.oaclix.android.share.NativeDeviceShareTransport
-import app.oaclix.android.share.NativeGeneralShareTransport
-import app.oaclix.android.share.NativeImageDeviceShareTransport
 import app.oaclix.android.share.NativeShareDestination
 import app.oaclix.android.share.NativeShareDestinationPresentation
 import app.oaclix.android.share.NativeShareDestinationSource
@@ -105,10 +101,7 @@ class ShareReceiverActivity : Activity() {
                 loadSharedText(intent)
                 loadLinkedDestinations()
             }
-            SharedContentMode.Image -> {
-                loadSharedImage(intent)
-                loadLinkedDestinations()
-            }
+            SharedContentMode.Image -> loadSharedImage(intent)
         }
     }
 
@@ -240,14 +233,8 @@ class ShareReceiverActivity : Activity() {
         return clip.getItemAt(0).uri
     }
 
-    private fun initialDestinations(): List<NativeShareDestination> {
-        if (contentMode == SharedContentMode.Image) return listOf(NativeShareDestination.LocalClipboard)
-        return if (configuredBaseUrl().isBlank()) {
-            listOf(NativeShareDestination.LocalClipboard)
-        } else {
-            listOf(NativeShareDestination.LocalClipboard, NativeShareDestination.GeneralRoom)
-        }
-    }
+    private fun initialDestinations(): List<NativeShareDestination> =
+        listOf(NativeShareDestination.LocalClipboard)
 
     private fun configuredBaseUrl(): String = NativeBackendConfig.resolve(this)
 
@@ -288,36 +275,27 @@ class ShareReceiverActivity : Activity() {
     }
 
     private fun loadLinkedDestinations() {
+        if (contentMode != SharedContentMode.Text) return
         val baseUrl = configuredBaseUrl()
         if (baseUrl.isBlank()) {
-            destinationStatus.text = getString(
-                if (contentMode == SharedContentMode.Image) R.string.share_destination_image_local_only
-                else R.string.share_destination_local_only,
-            )
+            destinationStatus.setText(R.string.share_destination_local_only)
             return
         }
 
-        destinationStatus.text = getString(R.string.share_destination_loading)
+        destinationStatus.setText(R.string.share_destination_loading)
         ioExecutor.execute {
             try {
-                val source = NativeShareDestinationSource(baseUrl)
-                val loaded = source.load()
-                val destinations = if (contentMode == SharedContentMode.Image) {
-                    loaded.filter { it == NativeShareDestination.LocalClipboard || it is NativeShareDestination.LinkedDevice }
-                } else loaded
+                val destinations = NativeShareDestinationSource(baseUrl).load()
                 runOnUiThread {
                     if (!isDestroyed) {
                         renderDestinations(destinations)
-                        destinationStatus.text = getString(
-                            if (contentMode == SharedContentMode.Image) R.string.share_destination_image_devices_ready
-                            else R.string.share_destination_devices_ready,
-                        )
+                        destinationStatus.setText(R.string.share_destination_devices_ready)
                     }
                 }
             } catch (_: Exception) {
                 runOnUiThread {
                     if (!isDestroyed) {
-                        destinationStatus.text = getString(R.string.share_destination_load_failed)
+                        destinationStatus.setText(R.string.share_destination_load_failed)
                     }
                 }
             }
@@ -347,12 +325,9 @@ class ShareReceiverActivity : Activity() {
         )
 
         NativeShareDestinationPresentation.options(destinations).forEachIndexed { index, option ->
-            val label = if (contentMode == SharedContentMode.Image && option.destination is NativeShareDestination.LinkedDevice) {
-                "${option.label} · Nube"
-            } else option.label
             val button = RadioButton(this).apply {
                 id = View.generateViewId()
-                text = label
+                text = option.label
                 isEnabled = option.actionable
                 isChecked = index == 0 && option.actionable
                 gravity = Gravity.CENTER_VERTICAL
@@ -380,7 +355,6 @@ class ShareReceiverActivity : Activity() {
     private fun updateConfirmLabel(destination: NativeShareDestination?) {
         if (isBusy) return
         confirmButton.text = when (destination) {
-            NativeShareDestination.GeneralRoom -> getString(R.string.share_send_general)
             is NativeShareDestination.LinkedDevice -> getString(R.string.share_send_device, destination.label)
             else -> getString(R.string.share_save_local)
         }
@@ -409,17 +383,14 @@ class ShareReceiverActivity : Activity() {
         if (!::confirmButton.isInitialized || !::destinationGroup.isInitialized) return
         val destination = destinationByButtonId[destinationGroup.checkedRadioButtonId]
         val canUseDestination = when (contentMode) {
-            SharedContentMode.Image -> sharedImageUri != null && (
-                destination == NativeShareDestination.LocalClipboard || destination is NativeShareDestination.LinkedDevice
-            )
+            SharedContentMode.Image -> sharedImageUri != null && destination == NativeShareDestination.LocalClipboard
             SharedContentMode.Text -> {
                 if (!::input.isInitialized) return
                 val text = currentText()
                 when (destination) {
                     NativeShareDestination.LocalClipboard -> history.canSave(text)
-                    NativeShareDestination.GeneralRoom,
-                    is NativeShareDestination.LinkedDevice,
-                    -> text.isNotBlank() && text.length <= LocalClipboardPolicy.MAX_TEXT_LENGTH
+                    is NativeShareDestination.LinkedDevice ->
+                        text.isNotBlank() && text.length <= LocalClipboardPolicy.MAX_TEXT_LENGTH
                     null -> false
                 }
             }
@@ -459,7 +430,6 @@ class ShareReceiverActivity : Activity() {
         }
 
         when (destination) {
-            NativeShareDestination.GeneralRoom -> sendGeneral(text)
             is NativeShareDestination.LinkedDevice -> sendDevice(destination, text)
             NativeShareDestination.LocalClipboard -> Unit
             null -> toast(getString(R.string.share_destination_select))
@@ -473,10 +443,10 @@ class ShareReceiverActivity : Activity() {
             toast(getString(R.string.share_invalid))
             return
         }
-        when (destination) {
-            NativeShareDestination.LocalClipboard -> saveLocalImage(uri, sharedImageMimeType)
-            is NativeShareDestination.LinkedDevice -> sendImageDevice(destination, uri, sharedImageMimeType)
-            else -> toast(getString(R.string.share_destination_select))
+        if (destination == NativeShareDestination.LocalClipboard) {
+            saveLocalImage(uri, sharedImageMimeType)
+        } else {
+            toast(getString(R.string.share_destination_select))
         }
     }
 
@@ -503,60 +473,14 @@ class ShareReceiverActivity : Activity() {
         )
     }
 
-    private fun sendImageDevice(destination: NativeShareDestination.LinkedDevice, uri: Uri, mimeType: String?) {
-        val baseUrl = configuredBaseUrl()
-        if (baseUrl.isBlank()) {
-            toast(getString(R.string.share_general_unavailable))
-            return
-        }
-        runStorage(
-            busyLabel = R.string.share_preparing_cloud_image,
-            task = {
-                val prepared = ImageCloudCopyPreparer.prepare(this, uri, mimeType)
-                NativeImageDeviceShareTransport(baseUrl).send(
-                    targetDeviceId = destination.deviceId,
-                    bytes = prepared.bytes,
-                    mimeType = prepared.mimeType,
-                )
-                prepared.optimized
-            },
-            onSuccess = { optimized ->
-                toast(
-                    getString(
-                        if (optimized) R.string.share_image_sent_cloud_optimized else R.string.share_image_sent_cloud,
-                        destination.label,
-                    ),
-                )
-                finish()
-            },
-        )
-    }
-
-    private fun sendGeneral(text: String) {
-        val baseUrl = configuredBaseUrl()
-        if (baseUrl.isBlank()) {
-            toast(getString(R.string.share_general_unavailable))
-            return
-        }
-        runStorage(
-            busyLabel = R.string.share_sending,
-            task = { NativeGeneralShareTransport(baseUrl).send(text) },
-            onSuccess = {
-                toast(getString(R.string.share_sent_general))
-                finish()
-            },
-        )
-    }
-
     private fun sendDevice(destination: NativeShareDestination.LinkedDevice, text: String) {
-        val baseUrl = configuredBaseUrl()
-        if (baseUrl.isBlank()) {
-            toast(getString(R.string.share_general_unavailable))
-            return
-        }
         runStorage(
             busyLabel = R.string.share_sending,
-            task = { NativeDeviceShareTransport(baseUrl).send(destination.deviceId, text) },
+            task = {
+                val app = application as? OaclixApplication
+                    ?: throw IllegalStateException("OACLIX no pudo abrir el canal directo")
+                app.sendDirectText(destination.deviceId, text)
+            },
             onSuccess = {
                 toast(getString(R.string.share_sent_device, destination.label))
                 finish()
