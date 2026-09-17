@@ -153,39 +153,39 @@ La Etapa A incluye:
 - copiar, compartir mediante share sheet nativo y eliminar;
 - botón `Agregar` para texto, portapapeles, imagen y vinculación.
 
-### Etapa B — contratos y peer directo
+### Etapa B — contratos, peer y conexión al flujo real
 
-- PR #13 inició Etapa B y cerró la auditoría de reutilización en `docs/STAGE_B_TEXT_AUDIT.md`.
-- PR #13 separó señalización metadata-only de payload/ACK directo; CI #159 quedó verde.
-- PR #13 quedó integrado mediante `7acf915da3eb6b3039cfde0f3fd9da64115220dd`.
-- PR #14 añadió `NativeDirectTextPeerManager` con WebRTC/DataChannel LAN, sin TURN/relay y sin payload cloud.
-- PR #14 quedó integrado en `main` mediante `1477b7ec57b0ce9b3879e29bb13609d84b27f2e3`.
-- CI #163 verificó el `main` posterior a PR #14 en Web/Worker + Android.
+- PR #13 cerró la auditoría de reutilización en `docs/STAGE_B_TEXT_AUDIT.md` y separó señalización metadata-only de payload/ACK directo; integrado mediante `7acf915da3eb6b3039cfde0f3fd9da64115220dd`.
+- CI #159 verificó PR #13.
+- PR #14 añadió `NativeDirectTextPeerManager` con WebRTC/DataChannel LAN, sin TURN/relay y sin payload cloud; integrado mediante `1477b7ec57b0ce9b3879e29bb13609d84b27f2e3`.
+- CI #163 verificó el `main` posterior a PR #14.
+- PR #15 conectó el peer al flujo Android real y quedó integrado mediante `6e563c7d9b697fa572695bb9b0d2c5597117b176`.
+- CI #187 verificó el head final de PR #15 en Web/Worker y Android.
+- CI #188 verificó el `main` posterior al merge de PR #15 en Web/Worker y Android, incluido `testDebugUnitTest + assembleDebug`.
 
-## 10. Checkpoint de desarrollo actual — PR #15
+No hay PR abiertos al cerrar este checkpoint.
 
-PR #15, rama `feat/native-direct-text-realtime-session`, conecta el peer directo al flujo Android real:
+## 10. Estado integrado actual
+
+El flujo Android de texto directo ya está integrado en `main`:
 
 - una sola `NativeDirectTextSessionController` posee el WebSocket realtime durante el foreground;
 - el WebSocket se limita a identidad/presencia y señalización SDP/ICE;
 - el Share Sheet de texto lista dispositivos vinculados y usa `sendDirectText(...)`;
-- el payload y el ACK viajan únicamente por WebRTC DataChannel;
+- payload y ACK viajan únicamente por WebRTC DataChannel;
 - el receptor persiste de forma idempotente, copia al Android Clipboard y recién entonces responde `stored`;
 - el emisor solo completa con éxito al recibir `stored`;
 - el flujo Android visible ya no ofrece `General`;
 - las imágenes del Share Sheet quedan locales hasta implementar imagen directa;
 - se eliminaron transportes Android de payload cloud y helpers huérfanos relacionados.
 
-Verificación de implementación antes de esta actualización documental:
+Último checkpoint integrado y verificado por CI antes de este cierre documental:
 
-- CI #186 sobre `b2402625cffa9a30a56481f10b1c095fd896d0ba`: **Web/Worker ✅ y Android `testDebugUnitTest + assembleDebug` ✅**.
-- La prueba física de dos Android en la misma LAN **todavía no se ha realizado** y no debe marcarse como completada.
+- `main`: `6e563c7d9b697fa572695bb9b0d2c5597117b176`.
+- CI post-merge: #188, Web/Worker ✅ y Android ✅.
+- La prueba física de dos Android en la misma LAN **todavía no se ha realizado**.
 
-Estado integrado al momento de esta actualización:
-
-- `main`: `1477b7ec57b0ce9b3879e29bb13609d84b27f2e3` antes de integrar PR #15.
-- desarrollo: PR #15.
-- Siempre verificar GitHub en vivo antes de asumir que estos refs siguen siendo los últimos.
+Por tanto, el código está integrado y compilado, pero el primer MVP dispositivo-a-dispositivo todavía no debe declararse físicamente probado.
 
 ## 11. Nuevo MVP — criterio de terminado
 
@@ -205,18 +205,20 @@ Ese gate físico es obligatorio antes de ampliar a imágenes, archivos o P2P ent
 
 ## 12. Siguiente paso exacto
 
-Primero cerrar la integración de PR #15:
-
-1. ejecutar CI final después de esta actualización de estado;
-2. verificar que `main` no cambió y que no existe trabajo paralelo conflictivo;
-3. marcar PR #15 listo e integrarlo solo con CI verde;
-4. verificar el CI posterior al merge en `main`.
-
-Después, el siguiente checkpoint de producto es **prueba física de texto entre dos Android reales en la misma LAN**:
+El siguiente checkpoint de producto es **prueba física de texto entre dos Android reales vinculados en la misma LAN**:
 
 **Share Sheet → dispositivo vinculado → DataChannel directo → guardado local → Android Clipboard → ACK `stored` → éxito del emisor.**
 
-Si esa prueba revela un fallo, reproducirlo y corregir la causa antes de continuar.
+Orden de ejecución:
+
+1. obtener/instalar una APK construida desde el `main` integrado actual en ambos Android de prueba;
+2. confirmar que ambos dispositivos siguen vinculados y aparecen como destinos;
+3. mantener ambos Android en la misma LAN y con OACLIX en foreground para este gate;
+4. desde una app externa, compartir un texto hacia OACLIX en el emisor;
+5. elegir el otro dispositivo;
+6. comprobar recepción local, Android Clipboard y ACK de éxito;
+7. repetir al menos en sentido inverso;
+8. si falla, reproducir el problema, identificar la causa real y corregirla antes de ampliar alcance.
 
 No comenzar imágenes directas, archivos genéricos, envío desde tarjetas, P2P entre redes, panel, TURN ni relay de contenido hasta cerrar este gate físico.
 
@@ -237,13 +239,13 @@ Leyenda: `✅` hecho y verificado por código/CI; `⏳` activo o pendiente de ve
 
 - ✅ Auditoría de reutilización y contratos directos de PR #13.
 - ✅ Peer LAN nativo de texto sobre DataChannel de PR #14, sin TURN/relay.
-- ✅ Una sola sesión realtime Android para presencia + SDP/ICE, verificada por código/CI en PR #15.
-- ✅ Share Sheet de texto → dispositivo vinculado → peer directo, verificado por código/CI en PR #15.
-- ✅ Receptor guarda localmente antes de confirmar, verificado por código/tests.
-- ✅ Texto recibido se copia a Android Clipboard antes del ACK, verificado por código/tests.
-- ✅ Emisor completa éxito solo con ACK `stored`, verificado por código/tests.
-- ⏳ Integrar PR #15 y verificar CI de `main`.
-- ⬜ Probar el flujo completo entre dos Android reales en la misma LAN.
+- ✅ Una sola sesión realtime Android para presencia + SDP/ICE.
+- ✅ Share Sheet de texto → dispositivo vinculado → peer directo.
+- ✅ Receptor guarda localmente antes de confirmar.
+- ✅ Texto recibido se copia a Android Clipboard antes del ACK.
+- ✅ Emisor completa éxito solo con ACK `stored`.
+- ✅ PR #15 integrado y `main` verificado por CI #188.
+- ⏳ Probar físicamente el flujo completo entre dos Android reales en la misma LAN.
 
 ### Etapa C — ampliar el mismo contrato
 
@@ -275,7 +277,7 @@ Un chat nuevo debe:
 1. leer este archivo y `CRITICAL_CHAT_CONTINUITY.md`;
 2. verificar `main`, CI, ramas activas, PR abiertos/recientes y commits recientes;
 3. revisar el código real de la tarea;
-4. distinguir checkpoint estable, desarrollo activo y prueba física pendiente;
+4. distinguir checkpoint integrado/CI de prueba física real;
 5. tratar ramas/PR de la dirección anterior como históricos salvo decisión explícita de reutilización;
 6. continuar desde el siguiente paso vigente, no desde memoria ni conversaciones antiguas.
 
