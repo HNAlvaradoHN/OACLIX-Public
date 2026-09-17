@@ -107,7 +107,7 @@ internal class NativeDirectTextSessionController(
     }
 
     private fun connect(attempt: Long) {
-        var session: ActiveSession? = null
+        var sessionToClose: ActiveSession? = null
         try {
             val rawBaseUrl = baseUrlProvider().trim()
             if (rawBaseUrl.isBlank()) throw IOException("Configura la conexión OACLIX primero")
@@ -125,18 +125,19 @@ internal class NativeDirectTextSessionController(
                 sendRealtimeFrame = { frame -> sendSignalFrame(attempt, frame) },
                 onIncomingTransfer = onIncomingTransfer,
             )
-            session = ActiveSession(
+            val createdSession = ActiveSession(
                 generation = attempt,
                 deviceId = deviceId,
                 peer = peer,
             )
+            sessionToClose = createdSession
 
             synchronized(stateLock) {
                 if (!isAttemptCurrent(attempt)) {
-                    peer.close()
+                    createdSession.close("Sesión cancelada")
                     return
                 }
-                active = session
+                active = createdSession
                 connecting = false
                 startupFailure = null
                 stateLock.notifyAll()
@@ -156,13 +157,15 @@ internal class NativeDirectTextSessionController(
                 .header("Sec-WebSocket-Protocol", "oaclix-v1, $authProtocol")
                 .build()
 
-            val createdSocket = client.newWebSocket(request, listenerFor(session))
-            session.socket.set(createdSocket)
-            if (!isSessionCurrent(session)) {
+            val createdSocket = client.newWebSocket(request, listenerFor(createdSession))
+            createdSession.socket.set(createdSocket)
+            sessionToClose = null
+            if (!isSessionCurrent(createdSession)) {
                 createdSocket.close(1000, "Sesión reemplazada")
+                createdSession.peer.close()
             }
         } catch (error: Exception) {
-            session?.close("No se pudo abrir la sesión")
+            sessionToClose?.close("No se pudo abrir la sesión")
             failStartup(
                 attempt,
                 if (error is IOException) error else IOException(error.message ?: "Falló la sesión realtime", error),
@@ -183,16 +186,18 @@ internal class NativeDirectTextSessionController(
                     }
                     synchronized(stateLock) {
                         if (active !== session) return
-                        session.ready = true
+                        session.readySessionId = ready.sessionId
                         stateLock.notifyAll()
                     }
                 }
 
                 "presence" -> {
                     val peers = NativeDirectSignalProtocol.parsePresence(message) ?: return
-                    if (peers.none { it.deviceId == session.deviceId }) return
+                    val localPeer = peers.firstOrNull { it.deviceId == session.deviceId } ?: return
                     synchronized(stateLock) {
                         if (active !== session) return
+                        val readySessionId = session.readySessionId ?: return
+                        if (localPeer.sessionId != readySessionId) return
                         session.presenceKnown = true
                         session.onlineDeviceIds = peers.asSequence().map { it.deviceId }.toSet()
                         stateLock.notifyAll()
@@ -226,7 +231,7 @@ internal class NativeDirectTextSessionController(
                 !requested ||
                 current == null ||
                 current.generation != attempt ||
-                !current.ready
+                current.readySessionId == null
             ) return false
             current.socket.get()
         } ?: return false
@@ -241,7 +246,7 @@ internal class NativeDirectTextSessionController(
                     if (active == null && !connecting) throw failure
                 }
                 val current = active
-                if (current != null && current.ready && current.presenceKnown) {
+                if (current != null && current.readySessionId != null && current.presenceKnown) {
                     if (targetDeviceId !in current.onlineDeviceIds) {
                         throw IOException("El dispositivo de destino no está conectado")
                     }
@@ -258,13 +263,16 @@ internal class NativeDirectTextSessionController(
     }
 
     private fun failStartup(attempt: Long, error: IOException) {
-        synchronized(stateLock) {
+        val stale = synchronized(stateLock) {
             if (attempt != generation) return
             connecting = false
-            if (active?.generation == attempt) active = null
+            val current = active?.takeIf { it.generation == attempt }
+            if (current != null) active = null
             startupFailure = error
             stateLock.notifyAll()
+            current
         }
+        stale?.close("Falló el inicio realtime")
     }
 
     private fun failSession(session: ActiveSession, error: IOException) {
@@ -298,7 +306,7 @@ internal class NativeDirectTextSessionController(
         val peer: NativeDirectTextPeerManager,
     ) {
         val socket = AtomicReference<WebSocket?>(null)
-        var ready: Boolean = false
+        var readySessionId: String? = null
         var presenceKnown: Boolean = false
         var onlineDeviceIds: Set<String> = emptySet()
 
