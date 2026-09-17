@@ -103,7 +103,7 @@
     <string name="link_devices_title">Tus dispositivos</string>
     <string name="link_refresh">Actualizar</string>
     <string name="link_ready">Puedes vincular otro dispositivo o administrar los que ya están vinculados.</string>
-    <string name="link_connection_required">Primero configura la conexión desde el flujo Compartir de OACLIX.</string>
+    <string name="link_connection_required">Configura la conexión de OACLIX para vincular dispositivos.</string>
     <string name="link_code_required">Introduce el código de vinculación.</string>
     <string name="link_in_progress">Vinculando…</string>
     <string name="link_loading_devices">Actualizando dispositivos…</string>
