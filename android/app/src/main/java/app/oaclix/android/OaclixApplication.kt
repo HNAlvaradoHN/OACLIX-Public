@@ -16,26 +16,29 @@ class OaclixApplication : Application(), Application.ActivityLifecycleCallbacks 
 
     override fun onCreate() {
         super.onCreate()
-        directTextController = NativeDirectTextSessionController(this) { transfer ->
-            if (NativeDirectTextProtocol.isExpired(transfer)) {
-                NativeDirectTextProtocol.AckStatus.Expired
-            } else {
-                runCatching {
-                    LocalClipboardHistory(this).saveReceived(
-                        text = transfer.text,
-                        itemId = transfer.itemId,
-                        senderDeviceId = transfer.senderDeviceId,
-                        createdAt = transfer.createdAt,
-                        expiresAt = transfer.expiresAt,
+        directTextController = NativeDirectTextSessionController(
+            context = this,
+            onIncomingTransfer = { transfer ->
+                if (NativeDirectTextProtocol.isExpired(transfer)) {
+                    NativeDirectTextProtocol.AckStatus.Expired
+                } else {
+                    runCatching {
+                        LocalClipboardHistory(this).saveReceived(
+                            text = transfer.text,
+                            itemId = transfer.itemId,
+                            senderDeviceId = transfer.senderDeviceId,
+                            createdAt = transfer.createdAt,
+                            expiresAt = transfer.expiresAt,
+                        )
+                        OaclixClipboardBridge.copy(this, transfer.text)
+                        NativeTextReceiptBus.publishStored()
+                    }.fold(
+                        onSuccess = { NativeDirectTextProtocol.AckStatus.Stored },
+                        onFailure = { NativeDirectTextProtocol.AckStatus.Rejected },
                     )
-                    OaclixClipboardBridge.copy(this, transfer.text)
-                    NativeTextReceiptBus.publishStored()
-                }.fold(
-                    onSuccess = { NativeDirectTextProtocol.AckStatus.Stored },
-                    onFailure = { NativeDirectTextProtocol.AckStatus.Rejected },
-                )
-            }
-        }
+                }
+            },
+        )
         receiverGate = NativeForegroundReceiverGate(
             onFirstSurfaceStarted = directTextController::start,
             onLastSurfaceStopped = directTextController::stop,
