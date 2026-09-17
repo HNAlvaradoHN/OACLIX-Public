@@ -6,6 +6,8 @@ OACLIX es una aplicación local-first para mover contenido entre dispositivos vi
 
 La fuente de verdad funcional y de roadmap es [`PROJECT_STATE.md`](./PROJECT_STATE.md).
 
+Antes de trabajar en el proyecto también es obligatorio leer [`CRITICAL_CHAT_CONTINUITY.md`](./CRITICAL_CHAT_CONTINUITY.md). Esa regla exige **rotar de chat preventivamente antes de saturarlo**, cerrando y documentando primero el checkpoint actual para no dejar trabajo a medias.
+
 Principios vigentes:
 
 - vincular una vez → elegir destino → enviar → recibir;
