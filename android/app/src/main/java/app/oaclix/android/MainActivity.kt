@@ -18,6 +18,8 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import app.oaclix.android.connection.NativeBackendConfig
+import app.oaclix.android.fileclipboard.FileClipboardItem
+import app.oaclix.android.fileclipboard.FileClipboardStore
 import app.oaclix.android.identity.AndroidKeystoreDeviceIdentity
 import app.oaclix.android.identity.NativeLinkedDeviceSnapshot
 import app.oaclix.android.identity.NativeLinkedDevicesSnapshot
@@ -35,6 +37,7 @@ import kotlin.math.ceil
 class MainActivity : Activity() {
     private lateinit var history: LocalClipboardHistory
     private lateinit var imageStore: ImageClipboardStore
+    private lateinit var fileStore: FileClipboardStore
     private lateinit var emptyState: TextView
     private lateinit var itemsContainer: LinearLayout
     private lateinit var devicesContainer: LinearLayout
@@ -50,6 +53,7 @@ class MainActivity : Activity() {
 
         history = LocalClipboardHistory(this)
         imageStore = ImageClipboardStore(this)
+        fileStore = FileClipboardStore(this)
         ioExecutor = Executors.newSingleThreadExecutor()
         emptyState = findViewById(R.id.empty_state)
         itemsContainer = findViewById(R.id.items_container)
@@ -75,7 +79,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        if (::history.isInitialized && ::imageStore.isInitialized) loadItems()
+        if (::history.isInitialized && ::imageStore.isInitialized && ::fileStore.isInitialized) loadItems()
         if (::devicesContainer.isInitialized) loadLinkedDevices()
     }
 
@@ -92,12 +96,15 @@ class MainActivity : Activity() {
         super.onDestroy()
     }
 
-    @Deprecated("Deprecated in Android; retained for the small local photo picker until Activity Result is introduced.")
+    @Deprecated("Deprecated in Android; retained for the small local pickers until Activity Result is introduced.")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != PICK_IMAGE_REQUEST || resultCode != RESULT_OK) return
+        if (resultCode != RESULT_OK) return
         val uri = data?.data ?: return
-        importImage(uri, getString(R.string.home_image_selected))
+        when (requestCode) {
+            PICK_IMAGE_REQUEST -> importImage(uri, getString(R.string.home_image_selected))
+            PICK_FILE_REQUEST -> importFile(uri)
+        }
     }
 
     private fun openLinkedDevices() {
@@ -109,6 +116,7 @@ class MainActivity : Activity() {
             getString(R.string.home_add_write_text),
             getString(R.string.home_add_clipboard),
             getString(R.string.home_add_image),
+            getString(R.string.home_add_file),
         )
         AlertDialog.Builder(this)
             .setTitle(R.string.home_add_content)
@@ -117,6 +125,7 @@ class MainActivity : Activity() {
                     0 -> showWriteTextDialog()
                     1 -> saveFromSystemClipboard()
                     2 -> chooseImage()
+                    3 -> chooseFile()
                 }
             }
             .setNegativeButton(R.string.cancel, null)
@@ -168,6 +177,15 @@ class MainActivity : Activity() {
         }
         @Suppress("DEPRECATION")
         startActivityForResult(intent, PICK_IMAGE_REQUEST)
+    }
+
+    private fun chooseFile() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+        }
+        @Suppress("DEPRECATION")
+        startActivityForResult(intent, PICK_FILE_REQUEST)
     }
 
     private fun saveFromSystemClipboard() {
@@ -266,6 +284,7 @@ class MainActivity : Activity() {
                 buildList<ClipboardDisplayItem> {
                     history.list().forEach { add(ClipboardDisplayItem.Text(it)) }
                     imageStore.list().forEach { add(ClipboardDisplayItem.Image(it)) }
+                    fileStore.list().forEach { add(ClipboardDisplayItem.FileItem(it)) }
                 }.sortedByDescending { it.createdAt }
             },
             onSuccess = ::renderItems,
@@ -311,12 +330,26 @@ class MainActivity : Activity() {
                     preview.text = getString(
                         R.string.image_item_preview,
                         imageFormatLabel(displayItem.item.mimeType),
-                        formatImageSize(displayItem.item.byteSize),
+                        formatFileSize(displayItem.item.byteSize),
                     )
                     bindImageThumbnail(imagePreview, displayItem.item)
                     copy.setOnClickListener { copyImageItem(displayItem.item) }
                     share.setOnClickListener { shareImageItem(displayItem.item) }
                     delete.setOnClickListener { deleteImageItem(displayItem.item) }
+                }
+
+                is ClipboardDisplayItem.FileItem -> {
+                    imagePreview.visibility = View.GONE
+                    typeBadge.visibility = View.VISIBLE
+                    typeBadge.text = fileTypeLabel(displayItem.item)
+                    preview.text = getString(
+                        R.string.file_item_preview,
+                        displayItem.item.displayName,
+                        formatFileSize(displayItem.item.byteSize),
+                    )
+                    copy.visibility = View.GONE
+                    share.setOnClickListener { shareFileItem(displayItem.item) }
+                    delete.setOnClickListener { deleteFileItem(displayItem.item) }
                 }
             }
 
@@ -415,6 +448,27 @@ class MainActivity : Activity() {
         )
     }
 
+    private fun shareFileItem(item: FileClipboardItem) {
+        val uri = fileStore.contentUri(item)
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = item.mimeType
+            putExtra(Intent.EXTRA_STREAM, uri)
+            clipData = ClipData.newUri(contentResolver, item.displayName, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivity(Intent.createChooser(intent, getString(R.string.share_out_title)))
+    }
+
+    private fun deleteFileItem(item: FileClipboardItem) {
+        runStorage(
+            task = { fileStore.delete(item) },
+            onSuccess = {
+                toast(getString(R.string.deleted_local))
+                loadItems()
+            },
+        )
+    }
+
     private fun copyTextToSystemClipboard(text: String) {
         OaclixClipboardBridge.copy(this, text)
         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) toast(getString(R.string.copied))
@@ -425,6 +479,16 @@ class MainActivity : Activity() {
             task = { imageStore.createFromUri(uri) },
             onSuccess = {
                 toast(successMessage)
+                loadItems()
+            },
+        )
+    }
+
+    private fun importFile(uri: Uri) {
+        runStorage(
+            task = { fileStore.createFromUri(uri) },
+            onSuccess = {
+                toast(getString(R.string.home_file_selected))
                 loadItems()
             },
         )
@@ -456,12 +520,25 @@ class MainActivity : Activity() {
         else -> "IMG"
     }
 
+    private fun fileTypeLabel(item: FileClipboardItem): String {
+        val extension = item.displayName.substringAfterLast('.', "").trim().uppercase()
+        return extension.takeIf { it.isNotBlank() }?.take(6) ?: "FILE"
+    }
+
     private fun formatKilobytes(bytes: Long): String = "${(bytes + 1023L) / 1024L} KB"
 
-    private fun formatImageSize(bytes: Long): String = if (bytes >= 1024L * 1024L) {
-        String.format(java.util.Locale.US, "%.1f MB", bytes / (1024.0 * 1024.0))
-    } else {
-        formatKilobytes(bytes)
+    private fun formatFileSize(bytes: Long): String = when {
+        bytes >= 1024L * 1024L * 1024L -> String.format(
+            java.util.Locale.US,
+            "%.1f GB",
+            bytes / (1024.0 * 1024.0 * 1024.0),
+        )
+        bytes >= 1024L * 1024L -> String.format(
+            java.util.Locale.US,
+            "%.1f MB",
+            bytes / (1024.0 * 1024.0),
+        )
+        else -> formatKilobytes(bytes)
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
@@ -499,10 +576,16 @@ class MainActivity : Activity() {
             override val createdAt: Long get() = item.createdAt
             override val expiresAt: Long get() = item.expiresAt
         }
+
+        data class FileItem(val item: FileClipboardItem) : ClipboardDisplayItem() {
+            override val createdAt: Long get() = item.createdAt
+            override val expiresAt: Long get() = item.expiresAt
+        }
     }
 
     companion object {
         private const val LOCAL_IMAGE_THUMBNAIL_DECODE_DP = 112
         private const val PICK_IMAGE_REQUEST = 3101
+        private const val PICK_FILE_REQUEST = 3102
     }
 }
