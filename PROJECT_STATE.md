@@ -162,12 +162,13 @@ Si una pieza añade complejidad sin acercar al usuario a:
 
 ## 10. Estado de desarrollo tras el cambio de dirección
 
-- La versión estable sigue siendo la que exista realmente en `main`; no declarar nuevas funciones como estables hasta integrarlas y verificarlas.
+- Versión estable actual: `main` en `880a59797adeaa27a488f805c0bde9bd62e79848`, integración de PR #10.
+- CI #154 sobre ese commit de `main` quedó verde en Web/Worker y Android; Android completó `testDebugUnitTest` y `assembleDebug`.
+- PR #10 (`feat/native-mvp-home`) está integrado y cierra la primera experiencia visible nativa del nuevo rumbo.
 - PR #2, #3, #4, #5, #6 y #7 están **cerrados como SUPERSEDED** y no son trabajo pendiente activo.
 - Las ramas históricas `docs/direct-transfer-research`, `feat/android-direct-image-native`, `feat/android-pwa-shell`, `feat/android-pwa-visual-parity`, `feat/functional-convergence-1`, `feat/transfer-control-plane` y `feat/transfer-engine` no definen el roadmap actual.
 - `scratch-do-not-use` no contiene trabajo oficial y no debe usarse.
 - El antiguo siguiente paso "Checkpoint 11: migrar imagen local a Transfer Engine" queda cancelado como siguiente paso oficial.
-- PR #10 (`feat/native-mvp-home`) es el trabajo activo de la nueva interfaz nativa y todavía no es versión estable mientras no pase CI y se integre a `main`.
 - No fusionar automáticamente ramas o PR históricos porque estén verdes; primero decidir qué piezas siguen siendo útiles para el nuevo MVP.
 - Documentación antigua que exista dentro de ramas históricas es solo historial y no puede reemplazar esta fuente de verdad.
 
@@ -187,18 +188,21 @@ Primero debe funcionar un flujo vertical real antes de ampliar la interfaz o añ
 
 ## 12. Siguiente paso exacto
 
-Cerrar primero el checkpoint visible de PR #10:
+La Etapa A ya está cerrada y verificada. El siguiente bloque es **Etapa B: primer flujo real de texto dispositivo-a-dispositivo**.
 
-1. corregir únicamente los fallos reales o pruebas obsoletas detectadas por CI;
-2. exigir Web/Worker + Android verdes;
-3. integrar PR #10 a `main` solo después de esa verificación;
-4. confirmar la APK construida desde el estado integrado.
+Antes de modificar transporte, auditar únicamente las piezas existentes necesarias para ese flujo y clasificar cada una como `reutilizar`, `adaptar` o `eliminar/no continuar`.
 
-Después, el siguiente bloque técnico será una **auditoría de reutilización enfocada únicamente en el flujo vertical de texto** y la implementación de:
+Después implementar, en pequeños checkpoints verificables:
 
-**Android Share Sheet → OACLIX → elegir dispositivo vinculado → transferencia directa → receptor → guardar local → texto disponible en portapapeles → ACK real de recepción.**
+1. Android Share Sheet recibe texto y muestra los dispositivos vinculados como destinos reales;
+2. al elegir un dispositivo, preparar una transferencia directa sin almacenar el contenido en nube;
+3. priorizar conexión LAN directa y reutilizar piezas de DataChannel/seguridad solo si encajan limpiamente con el nuevo flujo;
+4. el receptor guarda el texto localmente antes de confirmar éxito;
+5. el texto recibido queda disponible en Android Clipboard para pegar;
+6. el emisor solo muestra éxito después de un ACK real del receptor;
+7. probar extremo a extremo entre dos dispositivos reales.
 
-No exponer todavía envío desde las tarjetas locales hasta que el mismo transporte directo esté demostrado extremo a extremo. No construir panel lateral, archivos genéricos, favoritos ni accesos directos a apps antes de esa prueba.
+No exponer todavía envío desde las tarjetas locales hasta que este mismo contrato directo esté demostrado extremo a extremo. No construir panel lateral, archivos genéricos, favoritos ni accesos directos a apps antes de esa prueba.
 
 ## 13. Regla para futuros chats
 
@@ -222,19 +226,19 @@ Leyenda: `✅` hecho y verificado en su etapa; `⏳` en desarrollo o pendiente d
 ### Etapa A — primera experiencia visible en la APK
 
 - ✅ Dirección oficial local-first, sin nube de contenido y sin costo variable por transferencias.
-- ✅ Pantalla principal nativa nueva implementada en PR #10.
+- ✅ Pantalla principal nativa nueva integrada desde PR #10.
 - ✅ Dispositivos vinculados reales visibles arriba y acceso a Vinculados.
 - ✅ Texto e imágenes locales mostrados como tarjetas con miniatura cuando aplica.
 - ✅ Acciones locales `Copiar`, `Compartir` mediante share sheet nativo y `Eliminar`.
 - ✅ Botón único `Agregar` con escribir texto, guardar desde portapapeles, elegir imagen y vincular dispositivo.
 - ✅ Compartir una tarjeta hacia WhatsApp, Telegram, Gmail u otra app compatible queda delegado al share sheet nativo; no se crean accesos directos específicos todavía.
-- ⏳ Gate final de CI Web/Worker + Android para PR #10.
-- ⬜ Integrar PR #10 a `main` y tratar esa interfaz como estable.
-- ⬜ Generar/verificar APK del estado integrado para prueba manual visible.
+- ✅ Gate final Web/Worker + Android verde en CI #153 antes de integrar.
+- ✅ PR #10 integrado a `main` en `880a59797adeaa27a488f805c0bde9bd62e79848`.
+- ✅ Estado integrado verificado nuevamente en CI #154; Android ensambló `debug` correctamente.
 
 ### Etapa B — primer flujo real dispositivo a dispositivo
 
-- ⬜ Auditar piezas reutilizables de vinculación, LAN/DataChannel, integridad y recepción sin recuperar el roadmap viejo.
+- ⏳ Auditar piezas reutilizables de vinculación, LAN/DataChannel, integridad y recepción sin recuperar el roadmap viejo.
 - ⬜ Texto desde Android Share Sheet → elegir dispositivo vinculado.
 - ⬜ Transferencia directa LAN sin almacenar contenido en nube.
 - ⬜ Receptor guarda localmente antes de confirmar éxito.
