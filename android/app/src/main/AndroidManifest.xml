@@ -20,6 +20,13 @@
             android:exported="false"
             android:grantUriPermissions="true" />
 
+        <provider
+            android:name=".localclipboard.OaclixTextProvider"
+            android:authorities="${applicationId}.text"
+            android:enabled="true"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+
         <activity
             android:name=".ProcessTextActivity"
             android:excludeFromRecents="true"
