@@ -27,6 +27,13 @@
             android:exported="false"
             android:grantUriPermissions="true" />
 
+        <provider
+            android:name=".fileclipboard.OaclixFileProvider"
+            android:authorities="${applicationId}.files"
+            android:enabled="true"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+
         <activity
             android:name=".ProcessTextActivity"
             android:excludeFromRecents="true"
