@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="104dp"
+    android:layout_height="118dp"
+    android:layout_marginEnd="10dp"
+    android:background="@drawable/local_item_background"
+    android:clickable="true"
+    android:focusable="true"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="10dp">
+
+    <TextView
+        android:id="@+id/device_shortcut_initial"
+        android:layout_width="50dp"
+        android:layout_height="50dp"
+        android:background="@drawable/process_text_recent_background"
+        android:gravity="center"
+        android:textColor="@color/oaclix_accent"
+        android:textSize="22sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/device_shortcut_label"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="9dp"
+        android:ellipsize="end"
+        android:gravity="center"
+        android:maxLines="2"
+        android:textColor="@color/oaclix_text"
+        android:textSize="12sp" />
+</LinearLayout>
