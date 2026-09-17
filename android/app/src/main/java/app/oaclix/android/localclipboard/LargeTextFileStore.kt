@@ -72,6 +72,15 @@ class LargeTextFileStore(context: Context) {
         }
     }
 
+    fun contentUri(item: LargeTextFileItem): Uri {
+        require(FILE_ID_PATTERN.matches(item.id)) { "Identificador de texto largo inválido" }
+        return Uri.Builder()
+            .scheme("content")
+            .authority(providerAuthority(appContext.packageName))
+            .appendPath("${item.id}.txt")
+            .build()
+    }
+
     fun delete(item: LargeTextFileItem) {
         require(FILE_ID_PATTERN.matches(item.id)) { "Identificador de texto largo inválido" }
         File(directory, "${item.id}.txt").delete()
@@ -87,14 +96,8 @@ class LargeTextFileStore(context: Context) {
     }
 
     private fun itemFromFile(file: File, now: Long): LargeTextFileItem? {
-        val match = FILE_PATTERN.matchEntire(file.name)
-        if (match == null) {
-            file.delete()
-            return null
-        }
-
-        val createdAt = match.groupValues[1].toLongOrNull()
-        if (createdAt == null || createdAt < 0L) {
+        val createdAt = createdAtFromFileName(file.name)
+        if (createdAt == null) {
             file.delete()
             return null
         }
@@ -180,5 +183,16 @@ class LargeTextFileStore(context: Context) {
         private val FILE_PATTERN = Regex("^txt_(\\d{1,13})_[a-f0-9]{32}\\.txt$")
         private val FILE_ID_PATTERN = Regex("^txt_\\d{1,13}_[a-f0-9]{32}$")
         private val secureRandom = SecureRandom()
+
+        fun providerAuthority(packageName: String): String = "$packageName.text"
+
+        internal fun createdAtFromFileName(fileName: String): Long? = FILE_PATTERN
+            .matchEntire(fileName)
+            ?.groupValues
+            ?.get(1)
+            ?.toLongOrNull()
+            ?.takeIf { it >= 0L }
+
+        internal fun isValidFileName(fileName: String): Boolean = createdAtFromFileName(fileName) != null
     }
 }

@@ -63,6 +63,8 @@ class LocalClipboardHistory(context: Context) {
         is LocalClipboardEntry.TextFile -> fileStore.read(entry.item, now)
     }
 
+    fun contentUri(entry: LocalClipboardEntry.TextFile): Uri = fileStore.contentUri(entry.item)
+
     fun delete(entry: LocalClipboardEntry) {
         when (entry) {
             is LocalClipboardEntry.Inline -> repository.delete(entry.item.id)
