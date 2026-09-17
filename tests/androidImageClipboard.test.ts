@@ -9,10 +9,7 @@ async function read(path: string) {
 }
 
 test('Android image clipboard keeps local originals private and short-lived', async () => {
-  const [store, transferPolicy] = await Promise.all([
-    read('android/app/src/main/java/app/oaclix/android/imageclipboard/ImageClipboardStore.kt'),
-    read('android/app/src/main/java/app/oaclix/android/imageclipboard/ImageTransferPolicy.kt'),
-  ])
+  const store = await read('android/app/src/main/java/app/oaclix/android/imageclipboard/ImageClipboardStore.kt')
 
   assert.match(store, /DIRECTORY_NAME = "oaclix-images"/)
   assert.match(store, /RETENTION_MS = 6L \* 60L \* 60L \* 1000L/)
@@ -24,11 +21,7 @@ test('Android image clipboard keeps local originals private and short-lived', as
   assert.match(store, /image\/jpeg/)
   assert.match(store, /image\/webp/)
   assert.match(store, /image\/gif/)
-  assert.doesNotMatch(store, /MAX_IMAGE_BYTES/)
-  assert.doesNotMatch(store, /total\s*<=\s*MAX_IMAGE_BYTES/)
-
-  assert.match(transferPolicy, /CLOUD_MAX_IMAGE_BYTES = 10L \* 1024L \* 1024L/)
-  assert.match(transferPolicy, /requiresCloudOptimization/)
+  assert.doesNotMatch(store, /MAX_IMAGE_BYTES|CLOUD_MAX_IMAGE_BYTES/)
 })
 
 test('OACLIX exposes image clipboard entries through a read-only provider', async () => {
@@ -74,7 +67,7 @@ test('Mi portapapeles imports images, shows real thumbnails and copies them back
   assert.match(strings, /name="image_copied">Imagen copiada · lista para Pegar</)
 })
 
-test('Android Sharesheet accepts one image and stores its original locally', async () => {
+test('Android Sharesheet accepts one image and stores its original locally only', async () => {
   const [manifest, receiver, layout, strings] = await Promise.all([
     read('android/app/src/main/AndroidManifest.xml'),
     read('android/app/src/main/java/app/oaclix/android/ShareReceiverActivity.kt'),
@@ -89,17 +82,19 @@ test('Android Sharesheet accepts one image and stores its original locally', asy
   assert.match(receiver, /private fun loadSharedImage\(source: Intent\)/)
   assert.match(receiver, /val uri = sharedStreamUri\(source\)/)
   assert.match(receiver, /sharedImageMimeType = source\.type/)
-  assert.match(receiver, /contentMode == SharedContentMode\.Image[\s\S]*?listOf\(NativeShareDestination\.LocalClipboard\)/)
+  assert.match(receiver, /private fun initialDestinations\(\): List<NativeShareDestination> =[\s\S]*?listOf\(NativeShareDestination\.LocalClipboard\)/)
+  assert.match(receiver, /SharedContentMode\.Image -> sharedImageUri != null && destination == NativeShareDestination\.LocalClipboard/)
   assert.match(receiver, /private fun saveLocalImage\(uri: Uri, mimeType: String\?\)/)
   assert.match(receiver, /imageStore\.createFromUri\(uri, mimeTypeHint = mimeType\)/)
   assert.match(receiver, /decodeSharedImagePreview\(uri\)/)
   assert.match(receiver, /BitmapFactory\.Options\(\)\.apply \{ inJustDecodeBounds = true \}/)
+  assert.doesNotMatch(receiver, /NativeImageDeviceShareTransport|ImageCloudCopyPreparer|· Nube/)
   assert.match(layout, /@\+id\/share_image_section/)
   assert.match(layout, /@\+id\/share_image_preview/)
   assert.match(layout, /@\+id\/share_image_meta/)
-  assert.match(strings, /name="share_image_subtitle"/)
-  assert.match(strings, /name="share_destination_image_local_only"/)
-  assert.match(strings, /name="share_image_meta">Local: original · Nube: copia máx\. 10 MB</)
+  assert.match(strings, /name="share_image_subtitle">Guarda esta imagen en tu portapapeles local\.</)
+  assert.match(strings, /name="share_destination_image_local_only">Las imágenes se guardan localmente por ahora\.</)
+  assert.match(strings, /name="share_image_meta">Se guardará solo en este dispositivo</)
 })
 
 test('image clipboard MVP does not add AccessibilityService or Autofill', async () => {
