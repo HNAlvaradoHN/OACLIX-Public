@@ -162,9 +162,11 @@ Si una pieza añade complejidad sin acercar al usuario a:
 
 ## 10. Estado de desarrollo tras el cambio de dirección
 
-- Versión estable actual: `main` en `880a59797adeaa27a488f805c0bde9bd62e79848`, integración de PR #10.
-- CI #154 sobre ese commit de `main` quedó verde en Web/Worker y Android; Android completó `testDebugUnitTest` y `assembleDebug`.
+- Checkpoint estable de producto: PR #10, integrado mediante el commit `880a59797adeaa27a488f805c0bde9bd62e79848`; ese SHA identifica el checkpoint de producto, **no debe tratarse como el HEAD permanente de `main`**.
+- El HEAD real de `main` debe verificarse siempre en GitHub al iniciar o cerrar trabajo; commits documentales posteriores pueden moverlo sin cambiar la versión funcional del producto.
+- CI #154 sobre el checkpoint integrado quedó verde en Web/Worker y Android; Android completó `testDebugUnitTest` y `assembleDebug`.
 - PR #10 (`feat/native-mvp-home`) está integrado y cierra la primera experiencia visible nativa del nuevo rumbo.
+- PR #11 integró el cierre documental de esa Etapa A; no introduce cambios funcionales.
 - PR #2, #3, #4, #5, #6 y #7 están **cerrados como SUPERSEDED** y no son trabajo pendiente activo.
 - Las ramas históricas `docs/direct-transfer-research`, `feat/android-direct-image-native`, `feat/android-pwa-shell`, `feat/android-pwa-visual-parity`, `feat/functional-convergence-1`, `feat/transfer-control-plane` y `feat/transfer-engine` no definen el roadmap actual.
 - `scratch-do-not-use` no contiene trabajo oficial y no debe usarse.
@@ -233,8 +235,9 @@ Leyenda: `✅` hecho y verificado en su etapa; `⏳` en desarrollo o pendiente d
 - ✅ Botón único `Agregar` con escribir texto, guardar desde portapapeles, elegir imagen y vincular dispositivo.
 - ✅ Compartir una tarjeta hacia WhatsApp, Telegram, Gmail u otra app compatible queda delegado al share sheet nativo; no se crean accesos directos específicos todavía.
 - ✅ Gate final Web/Worker + Android verde en CI #153 antes de integrar.
-- ✅ PR #10 integrado a `main` en `880a59797adeaa27a488f805c0bde9bd62e79848`.
+- ✅ PR #10 integrado a `main` mediante el checkpoint `880a59797adeaa27a488f805c0bde9bd62e79848`.
 - ✅ Estado integrado verificado nuevamente en CI #154; Android ensambló `debug` correctamente.
+- ✅ Cierre documental de la etapa integrado mediante PR #11.
 
 ### Etapa B — primer flujo real dispositivo a dispositivo
 
