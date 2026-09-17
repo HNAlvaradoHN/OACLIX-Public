@@ -90,6 +90,8 @@ La interfaz nueva prioriza:
 
 No exponer conceptos técnicos de transporte.
 
+Decisión de UX local aprobada, todavía no implementada: cada elemento podrá elegir retención de **1 h, 3 h, 6 h, 12 h, 24 h o Permanente**. Se mantiene **6 h como valor predeterminado** y habrá una acción rápida **Mantener** para convertir un elemento temporal en permanente. Esta decisión aplica a texto, imágenes y archivos locales y no implica nube.
+
 Fuera del MVP inmediato:
 
 - panel lateral flotante;
@@ -175,6 +177,10 @@ La Etapa A incluye:
 - CI #192 verificó el head final de PR #17 y CI #193 verificó el `main` posterior al merge, incluido `testDebugUnitTest + assembleDebug` y publicación del APK.
 - PR #18 añadió la ruta local de archivos genéricos (`Elegir archivo` → copia privada → tarjeta local → Compartir/Eliminar) sin añadir transporte directo de archivos; integrado mediante `2875d21c178cba5ea60655e8e69a312b951df209`.
 - CI #195 verificó el head final de PR #18 en Web/Worker y Android. CI #196 verificó el `main` posterior al merge: su primer intento Android falló antes de probar código por un `Connection reset by peer` al descargar Gradle; el reintento del mismo commit pasó `testDebugUnitTest + assembleDebug` y publicó el APK sin cambio de código.
+- Durante la validación física del APK #197 se detectó que una instalación limpia intentaba resolver el placeholder `oaclix.invalid` como backend real, impidiendo generar códigos de vinculación.
+- PR #19 intentó restaurar un endpoint de despliegue dentro del snapshot público, pero la auditoría lo rechazó correctamente; se cerró **sin integrar** y no se debilitó la protección de publicación.
+- PR #20 corrigió la causa sin incrustar endpoints de despliegue en el repositorio público: el backend sin configurar queda vacío, los hosts `.invalid` se rechazan y **Vinculados** ofrece `Configurar conexión` para guardar localmente una URL HTTPS válida; integrado mediante `c5db993ef7491b2a4a8f1c452102c6cb067c795b`.
+- CI #199 verificó el head final de PR #20 con auditoría pública, Web/Worker y Android verdes. CI #200 verificó el `main` posterior al merge, incluido `testDebugUnitTest + assembleDebug` y publicación del APK.
 
 No hay PR abiertos al cerrar este checkpoint.
 
@@ -203,14 +209,18 @@ La experiencia local Android integrada además incluye:
 - copia por streaming del archivo elegido a almacenamiento privado `oaclix-files`, con retención de seis horas y sin nube;
 - tarjeta local de archivo con extensión, nombre y tamaño; para archivos genéricos se ofrecen Compartir y Eliminar, pero no Copiar porque Android no define un contrato universal de “pegar archivo” comparable al texto/imagen;
 - compartir archivos genéricos a otras apps conserva el MIME detectado y usa URI temporal de solo lectura;
-- el envío directo dispositivo-a-dispositivo de texto **sigue limitado a 8.000 caracteres** y ni el `.txt` grande ni los archivos genéricos forman parte todavía del protocolo directo.
+- el envío directo dispositivo-a-dispositivo de texto **sigue limitado a 8.000 caracteres** y ni el `.txt` grande ni los archivos genéricos forman parte todavía del protocolo directo;
+- una instalación pública sin backend inyectado ya no intenta resolver un host ficticio: queda explícitamente sin configurar;
+- `NativeBackendConfig` rechaza hosts `.invalid`;
+- la pantalla **Vinculados** permite configurar una URL HTTPS de conexión y la guarda solo en preferencias locales del dispositivo;
+- el snapshot público sigue prohibiendo endpoints de despliegue reales; la configuración del backend pertenece al despliegue/instalación, no al código público.
 
 Último checkpoint funcional integrado y verificado:
 
-- checkpoint funcional de `main`: `2875d21c178cba5ea60655e8e69a312b951df209`.
-- CI del head de PR: #195, Web/Worker ✅ y Android ✅.
-- CI post-merge: #196, Web/Worker ✅ y Android ✅ en el reintento, incluido APK debug publicado.
-- El primer intento Android de CI #196 no ejecutó las pruebas: falló por reinicio de conexión al descargar Gradle; no requirió modificación de código.
+- checkpoint funcional de `main`: `c5db993ef7491b2a4a8f1c452102c6cb067c795b`.
+- CI del head de PR: #199, auditoría pública ✅, Web/Worker ✅ y Android ✅.
+- CI post-merge: #200, Web/Worker ✅ y Android ✅, incluido APK debug publicado.
+- PR #19 quedó cerrado sin integrar porque violaba deliberadamente la auditoría pública al incrustar un endpoint de despliegue.
 - PR abiertos: 0.
 - Desarrollo activo paralelo: ninguno.
 - La prueba física de dos Android en la misma LAN **todavía no se ha completado**.
@@ -242,14 +252,15 @@ El siguiente checkpoint de producto es **prueba física de texto entre dos Andro
 Orden de ejecución:
 
 1. instalar una APK construida desde el checkpoint funcional integrado actual en ambos Android de prueba;
-2. confirmar que ambos dispositivos siguen vinculados y aparecen como destinos;
-3. mantener ambos Android en la misma LAN y con OACLIX en foreground para este gate;
-4. desde una app externa, compartir un texto hacia OACLIX en el emisor;
-5. elegir el otro dispositivo;
-6. comprobar recepción local, Android Clipboard y ACK de éxito;
-7. repetir al menos en sentido inverso;
-8. comprobar además en la APK actual el Photo Picker, compartir un texto local >8.000 caracteres como `.txt` y el flujo local `Elegir archivo` → tarjeta → Compartir/Eliminar;
-9. si falla, reproducir el problema, identificar la causa real y corregirla antes de ampliar alcance.
+2. si la APK pública no trae backend inyectado, abrir **Vinculados → Configurar conexión** y guardar en cada dispositivo la URL HTTPS del backend de despliegue autorizado;
+3. generar/consumir un código si los dispositivos necesitan volver a vincularse y confirmar que ambos aparecen como destinos;
+4. mantener ambos Android en la misma LAN y con OACLIX en foreground para este gate;
+5. desde una app externa, compartir un texto hacia OACLIX en el emisor;
+6. elegir el otro dispositivo;
+7. comprobar recepción local, Android Clipboard y ACK de éxito;
+8. repetir al menos en sentido inverso;
+9. comprobar además en la APK actual el Photo Picker, compartir un texto local >8.000 caracteres como `.txt` y el flujo local `Elegir archivo` → tarjeta → Compartir/Eliminar;
+10. si falla, reproducir el problema, identificar la causa real y corregirla antes de ampliar alcance.
 
 No comenzar imágenes directas, envío directo de archivos genéricos, envío desde tarjetas a otro dispositivo, P2P entre redes, panel, TURN ni relay de contenido hasta cerrar este gate físico.
 
@@ -270,6 +281,7 @@ Leyenda: `✅` hecho y verificado por código/CI; `⏳` activo o pendiente de ve
 - ✅ PR #10 + cierre documental PR #11 integrados y verificados.
 - ✅ PR #17 integrado y verificado por CI #193 para el pulido local de imagen/.txt.
 - ✅ PR #18 integrado y verificado por CI #195/#196 para archivos genéricos locales.
+- ⬜ Implementar retención seleccionable 1 h / 3 h / 6 h / 12 h / 24 h / Permanente y acción rápida Mantener; decisión aprobada, no implementada todavía.
 
 ### Etapa B — primer flujo real dispositivo a dispositivo
 
@@ -282,6 +294,7 @@ Leyenda: `✅` hecho y verificado por código/CI; `⏳` activo o pendiente de ve
 - ✅ Emisor completa éxito solo con ACK `stored`.
 - ✅ PR #15 integrado y `main` verificado por CI #188.
 - ✅ PR #16 publica APK debug de `main` con SHA-256 y retención corta.
+- ✅ PR #20 corrige el setup de backend en instalaciones públicas: sin host ficticio y con configuración explícita desde Vinculados; CI #199/#200 verdes.
 - ⏳ Probar físicamente el flujo completo entre dos Android reales en la misma LAN.
 
 ### Etapa C — ampliar el mismo contrato
@@ -299,7 +312,7 @@ Leyenda: `✅` hecho y verificado por código/CI; `⏳` activo o pendiente de ve
 
 ## 14. Ramas y trabajo histórico
 
-PR #2, #3, #4, #5, #6 y #7 están cerrados como **SUPERSEDED** y no son trabajo pendiente activo.
+PR #2, #3, #4, #5, #6 y #7 están cerrados como **SUPERSEDED** y no son trabajo pendiente activo. PR #19 también está cerrado sin integrar: su enfoque de incrustar el endpoint de despliegue en el snapshot público fue rechazado por la auditoría y sustituido por PR #20.
 
 Las ramas `docs/direct-transfer-research`, `feat/android-direct-image-native`, `feat/android-pwa-shell`, `feat/android-pwa-visual-parity`, `feat/functional-convergence-1`, `feat/transfer-control-plane` y `feat/transfer-engine` son históricas y no definen el roadmap actual.
 
