@@ -9,7 +9,7 @@ import org.junit.Test
 
 class NativeShareDestinationResolverTest {
     @Test
-    fun `local and General stay first while current device is excluded`() {
+    fun `local stays first while current device is excluded`() {
         val result = NativeShareDestinationResolver.resolve(
             currentDeviceId = "dev_current123456789",
             linked = NativeLinkedDevicesSnapshot(
@@ -23,8 +23,7 @@ class NativeShareDestinationResolverTest {
         )
 
         assertEquals(NativeShareDestination.LocalClipboard, result[0])
-        assertEquals(NativeShareDestination.GeneralRoom, result[1])
-        assertEquals(listOf("PC", "Tablet"), result.drop(2).map { it.label })
+        assertEquals(listOf("PC", "Tablet"), result.drop(1).map { it.label })
         assertFalse(result.any { it.stableId == "device:dev_current123456789" })
     }
 
@@ -41,10 +40,9 @@ class NativeShareDestinationResolverTest {
             ),
         )
 
-        assertEquals(3, result.size)
-        assertEquals(NativeShareDestination.GeneralRoom, result[1])
-        assertEquals("device:dev_phone1234567890", result[2].stableId)
-        assertEquals("Teléfono", result[2].label)
+        assertEquals(2, result.size)
+        assertEquals("device:dev_phone1234567890", result[1].stableId)
+        assertEquals("Teléfono", result[1].label)
     }
 
     @Test

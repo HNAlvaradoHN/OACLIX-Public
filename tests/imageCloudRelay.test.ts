@@ -34,7 +34,7 @@ function sampleTransfer() {
   }
 }
 
-test('image relay protocol keeps the approved cloud cap and local retention', () => {
+test('legacy web image relay protocol keeps its existing cap and local retention', () => {
   assert.equal(CLOUD_IMAGE_MAX_BYTES, 10 * 1024 * 1024)
   assert.equal(LOCAL_IMAGE_RETENTION_MS, 6 * 60 * 60 * 1000)
 
@@ -50,7 +50,7 @@ test('image relay protocol keeps the approved cloud cap and local retention', ()
   }), false)
 })
 
-test('worker relay only accepts a targeted linked-image envelope with matching sender and receiver', () => {
+test('worker legacy relay only accepts a targeted linked-image envelope with matching sender and receiver', () => {
   const transfer = sampleTransfer()
   const parsed = parseDeviceRelayInput({
     type: 'device-image-transfer',
@@ -75,12 +75,10 @@ test('worker relay only accepts a targeted linked-image envelope with matching s
   assert.equal(parsedAck?.type, 'device-image-transfer-ack')
 })
 
-test('relay code stores before acknowledging and never advertises this route as Directo', async () => {
-  const [worker, webReceiver, androidSender, androidReceiver, shareReceiver] = await Promise.all([
+test('legacy web image relay remains isolated from the active Android Share Sheet', async () => {
+  const [worker, webReceiver, shareReceiver] = await Promise.all([
     read('worker/realtime/realtimeHub.ts'),
     read('src/transport/localImageRelayReceiver.ts'),
-    read('android/app/src/main/java/app/oaclix/android/share/NativeImageDeviceShareTransport.kt'),
-    read('android/app/src/main/java/app/oaclix/android/share/NativeImageDeviceRelayReceiver.kt'),
     read('android/app/src/main/java/app/oaclix/android/ShareReceiverActivity.kt'),
   ])
 
@@ -92,18 +90,13 @@ test('relay code stores before acknowledging and never advertises this route as 
   const ackIndex = webReceiver.indexOf('sendDeviceImageRelayAck')
   assert.ok(storeIndex >= 0 && ackIndex >= 0 && storeIndex < ackIndex)
 
-  assert.match(androidSender, /ImageTransferPolicy\.CLOUD_MAX_IMAGE_BYTES/)
-  assert.match(androidSender, /"device-image-transfer"/)
-  assert.match(androidSender, /"device-image-transfer-ack"/)
-  assert.match(androidReceiver, /createFromBytes\(bytes, mimeType, createdAt\)/)
-  assert.match(androidReceiver, /if \(stored\) \{[\s\S]*onStored\(\)/)
-  assert.match(shareReceiver, /"\$\{option\.label\} · Nube"/)
-  assert.doesNotMatch(shareReceiver, /Imagen enviada por Directo/)
+  assert.match(shareReceiver, /SharedContentMode\.Image -> sharedImageUri != null && destination == NativeShareDestination\.LocalClipboard/)
+  assert.doesNotMatch(shareReceiver, /NativeImageDeviceShareTransport|NativeImageDeviceRelayReceiver|ImageCloudCopyPreparer|device-image-transfer|· Nube/)
 })
 
-test('Android image reception is foreground-scoped at application level and separated from the UI thread', async () => {
+test('Android foreground lifecycle owns one metadata-only realtime session for direct text', async () => {
   const [controller, application, gate, manifest, mainActivity] = await Promise.all([
-    read('android/app/src/main/java/app/oaclix/android/share/NativeImageRelayForegroundController.kt'),
+    read('android/app/src/main/java/app/oaclix/android/share/NativeDirectTextSessionController.kt'),
     read('android/app/src/main/java/app/oaclix/android/OaclixApplication.kt'),
     read('android/app/src/main/java/app/oaclix/android/share/NativeForegroundReceiverGate.kt'),
     read('android/app/src/main/AndroidManifest.xml'),
@@ -111,40 +104,38 @@ test('Android image reception is foreground-scoped at application level and sepa
   ])
 
   assert.match(controller, /Executors\.newSingleThreadExecutor\(\)/)
-  assert.match(controller, /NativeImageDeviceRelayReceiver/)
-  assert.match(controller, /executor\.execute/)
-  assert.match(controller, /receiver\?\.stop\(\)/)
+  assert.match(controller, /client\.newWebSocket\(request, listenerFor\(createdSession\)\)/)
+  assert.match(controller, /NativeDirectSignalProtocol\.isOutboundSignalFrame\(frame\)/)
+  assert.match(controller, /session\.peer\.handlePresence\(message\)/)
+  assert.match(controller, /"signal" -> session\.peer\.handleSignal\(message\)/)
+  assert.doesNotMatch(controller, /device-transfer|device-image-transfer/)
+
   assert.match(manifest, /android:name="\.OaclixApplication"/)
   assert.match(application, /Application\.ActivityLifecycleCallbacks/)
-  assert.match(application, /onFirstSurfaceStarted = imageRelayController::start/)
-  assert.match(application, /onLastSurfaceStopped = imageRelayController::stop/)
+  assert.match(application, /NativeDirectTextSessionController\(/)
+  assert.match(application, /onFirstSurfaceStarted = directTextController::start/)
+  assert.match(application, /onLastSurfaceStopped = directTextController::stop/)
+  assert.match(application, /LocalClipboardHistory\(this\)\.saveReceived/)
+  assert.match(application, /OaclixClipboardBridge\.copy\(this, transfer\.text\)/)
+  assert.match(application, /NativeTextReceiptBus\.publishStored\(\)/)
+  assert.match(application, /AckStatus\.Stored/)
   assert.match(application, /override fun onActivityStarted[\s\S]*receiverGate\.surfaceStarted\(\)/)
   assert.match(application, /override fun onActivityStopped[\s\S]*receiverGate\.surfaceStopped\(\)/)
+  assert.doesNotMatch(application, /NativeImageRelayForegroundController|NativeImageDeviceRelayReceiver/)
+
   assert.match(gate, /startedSurfaces/)
   assert.match(gate, /if \(startedSurfaces != 0 \|\| !active\) return/)
-  assert.doesNotMatch(mainActivity, /imageRelayController\.start\(\)/)
-  assert.doesNotMatch(mainActivity, /imageRelayController\.stop\(\)/)
-  assert.match(mainActivity, /NativeImageReceiptBus/)
-  assert.match(mainActivity, /R\.string\.image_received/)
+  assert.match(mainActivity, /NativeTextReceiptBus/)
+  assert.match(mainActivity, /R\.string\.text_received/)
 })
 
-test('cloud optimization is a separate stable copy and the PWA exposes stored received images locally', async () => {
-  const [preparer, spooler, store, composer, shelf, signal] = await Promise.all([
-    read('android/app/src/main/java/app/oaclix/android/imageclipboard/ImageCloudCopyPreparer.kt'),
-    read('android/app/src/main/java/app/oaclix/android/imageclipboard/ImageCloudSourceSpooler.kt'),
-    read('android/app/src/main/java/app/oaclix/android/imageclipboard/ImageClipboardStore.kt'),
+test('legacy PWA image relay keeps received images local to its web surface', async () => {
+  const [composer, shelf, signal] = await Promise.all([
     read('src/components/ClipboardComposer.tsx'),
     read('src/components/LocalImageClipboardShelf.tsx'),
     read('src/realtime/signalClient.ts'),
   ])
 
-  assert.match(preparer, /ImageCloudSourceSpooler\.snapshot/)
-  assert.match(preparer, /BitmapFactory\.decodeFile/)
-  assert.match(preparer, /PreparedImageCloudCopy\(output\.toByteArray\(\), "image\/webp", optimized = true\)/)
-  assert.match(preparer, /GIF mayores de 10 MB/)
-  assert.match(spooler, /Reads an incoming content stream exactly once/)
-  assert.match(spooler, /CloudImageSourceSnapshot\.OnDisk/)
-  assert.match(store, /fun createFromBytes/)
   assert.match(composer, /textareaId === 'local-text'/)
   assert.match(composer, /<LocalImageClipboardShelf onShare=\{onShareImage\} \/>/)
   assert.match(shelf, /readLocalImages\(\)/)

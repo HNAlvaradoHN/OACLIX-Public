@@ -18,6 +18,7 @@ internal object NativeDirectSignalProtocol {
     private val sessionIdPattern = Regex("^[A-Za-z0-9_-]{8,96}$")
     private val negotiationIdPattern = Regex("^[a-f0-9]{24}$")
 
+    data class ReadySession(val deviceId: String, val sessionId: String)
     data class PresencePeer(val deviceId: String, val sessionId: String)
 
     sealed interface Signal {
@@ -44,6 +45,15 @@ internal object NativeDirectSignalProtocol {
             val sdpMLineIndex: Int,
             val candidate: String,
         ) : Signal
+    }
+
+    fun parseReady(message: JSONObject): ReadySession? {
+        if (!hasExactKeys(message, setOf("type", "deviceId", "sessionId"))) return null
+        if (message.optString("type") != "ready") return null
+        val deviceId = message.optString("deviceId")
+        val sessionId = message.optString("sessionId")
+        if (!validDeviceId(deviceId) || !sessionIdPattern.matches(sessionId)) return null
+        return ReadySession(deviceId, sessionId)
     }
 
     fun parsePresence(message: JSONObject): List<PresencePeer>? {
@@ -162,6 +172,43 @@ internal object NativeDirectSignalProtocol {
                     .put("sdpMid", sdpMid ?: JSONObject.NULL)))
     }
 
+    /** Reject any outbound realtime frame that contains anything beyond SDP/ICE metadata. */
+    fun isOutboundSignalFrame(message: JSONObject): Boolean {
+        if (!hasExactKeys(message, setOf("type", "targetDeviceId", "signal"))) return false
+        if (message.optString("type") != "signal") return false
+        if (!validDeviceId(message.optString("targetDeviceId"))) return false
+        val signal = message.optJSONObject("signal") ?: return false
+        val negotiationId = signal.optString("negotiationId")
+        val generation = signal.optLong("negotiationGeneration", -1L)
+        if (
+            !negotiationIdPattern.matches(negotiationId)
+            || generation <= 0L
+            || generation > MAX_NEGOTIATION_GENERATION.toLong()
+        ) return false
+
+        return when (signal.optString("kind")) {
+            "description" -> {
+                if (!hasExactKeys(signal, setOf("kind", "negotiationId", "negotiationGeneration", "description"))) return false
+                val description = signal.optJSONObject("description") ?: return false
+                if (!hasExactKeys(description, setOf("type", "sdp"))) return false
+                val type = description.optString("type")
+                val sdp = description.optString("sdp")
+                (type == "offer" || type == "answer") && sdp.isNotBlank() && sdp.length <= MAX_SDP_LENGTH
+            }
+
+            "candidate" -> {
+                if (!hasExactKeys(signal, setOf("kind", "negotiationId", "negotiationGeneration", "candidate"))) return false
+                val candidateJson = signal.optJSONObject("candidate") ?: return false
+                if (!hasExactKeys(candidateJson, setOf("candidate", "sdpMLineIndex", "sdpMid"))) return false
+                val candidate = candidateJson.optString("candidate")
+                val lineIndex = candidateJson.optInt("sdpMLineIndex", -1)
+                candidate.isNotBlank() && candidate.length <= MAX_CANDIDATE_LENGTH && lineIndex >= 0
+            }
+
+            else -> false
+        }
+    }
+
     fun textDirectCapabilitiesJson(): JSONArray = JSONArray().put(TEXT_DIRECT_CAPABILITY)
 
     fun remoteSupportsTextDirect(value: Any?): Boolean {
@@ -176,6 +223,13 @@ internal object NativeDirectSignalProtocol {
     }
 
     fun validDeviceId(value: String): Boolean = deviceIdPattern.matches(value)
+
+    private fun hasExactKeys(value: JSONObject, expected: Set<String>): Boolean {
+        val actual = mutableSetOf<String>()
+        val keys = value.keys()
+        while (keys.hasNext()) actual += keys.next()
+        return actual == expected
+    }
 
     private const val ROOM_CORE_CAPABILITY = "room-core"
     private const val TEXT_DIRECT_CAPABILITY = "text-direct"

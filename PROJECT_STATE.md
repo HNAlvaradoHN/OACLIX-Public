@@ -4,109 +4,93 @@
 >
 > Antes de continuar desarrollo, cualquier chat o colaborador debe leer este archivo y comprobar el estado real de `main`, ramas, PR y CI. Si una rama, PR o documento histórico contradice este archivo, **este archivo define la dirección funcional vigente**, salvo una decisión posterior documentada explícitamente.
 
-## 1. Cambio oficial de rumbo
+## 1. Idea de producto vigente
 
-La dirección anterior centrada en salas visibles, una experiencia tipo "General", checkpoints internos de Transfer Control Plane / Transfer Engine como roadmap de producto y migraciones progresivas de esa interfaz **queda sustituida**.
-
-No continuar automáticamente Checkpoint 11 ni ningún roadmap antiguo solo porque aparezca en ramas o PR históricos.
-
-El código existente puede reutilizarse si ayuda al nuevo producto, pero **no debe conservarse una arquitectura, interfaz o flujo únicamente porque ya fue construido**.
-
-Git conserva el historial. El proyecto activo debe reflejar solo la dirección vigente.
-
-## 2. Propósito actual
-
-OACLIX debe permitir mover contenido entre dispositivos con el menor número posible de pasos:
+OACLIX debe mover contenido entre dispositivos con el menor número posible de pasos:
 
 **Vincular una vez → seleccionar o compartir contenido → elegir dispositivo → enviar → recibir.**
 
-El usuario no debe tener que entender salas, rutas de transporte, WebRTC, señalización ni conceptos internos.
+El usuario no debe tener que entender salas, WebRTC, señalización, rutas de transporte ni infraestructura interna.
 
-## 3. Principios no negociables
+La dirección anterior centrada en salas visibles, una experiencia tipo **General**, Transfer Control Plane / Transfer Engine como roadmap de producto y migraciones progresivas de esa interfaz queda sustituida.
 
-### Local-first
+Git conserva el historial. El proyecto activo conserva solo lo que siga sirviendo al producto vigente.
+
+## 2. Principios no negociables
+
+### Local-first y privacidad
 
 - El contenido del usuario vive en sus dispositivos.
-- OACLIX no almacena en nube textos, imágenes, videos, documentos, archivos ni historial del usuario.
+- OACLIX no debe almacenar en nube textos, imágenes, videos, documentos, archivos ni historial del usuario.
 - Si un elemento se conserva en OACLIX, se guarda localmente en el dispositivo correspondiente.
-- Si se envía a otro dispositivo, la copia recibida queda localmente en ese dispositivo.
+- Una transferencia a otro dispositivo crea una copia local en el receptor.
+- No registrar payload, nombres privados, rutas locales, URIs sensibles, secretos, claves privadas ni credenciales en telemetría innecesaria.
+- Dispositivos y usuarios deben permanecer correctamente aislados.
 
-### Sin costo variable por transferencias
+### Costo de transferencia
 
 - Objetivo obligatorio del núcleo: **$0 de gasto recurrente/variable por tráfico de usuarios**.
-- No depender de TURN o relay de pago para que el producto básico funcione.
-- No activar servicios que puedan facturar por GB sin aprobación explícita.
-- Si una conexión directa no es posible y la única alternativa generaría un costo no aprobado, la transferencia debe fallar de forma clara antes de producir ese costo.
+- No depender de TURN o relay de pago para que el MVP funcione.
+- No activar servicios facturables por GB sin aprobación explícita.
+- Si una conexión directa no es posible y la única alternativa genera un costo no aprobado, la transferencia falla de forma clara antes de producir ese costo.
 
-### Dispositivo a dispositivo
+### Transporte
 
-Orden deseado de transporte:
+Orden aprobado:
 
-1. conexión directa en LAN cuando sea posible;
-2. P2P directo por Internet entre redes distintas;
-3. no usar relay de pago en el MVP.
+1. LAN directa cuando sea posible;
+2. P2P directo por Internet entre redes distintas, después;
+3. sin TURN/relay de pago en el MVP.
 
-Un servicio pequeño de señalización/vinculación puede intercambiar únicamente metadata técnica necesaria para que los dispositivos se encuentren. **No debe almacenar contenido del usuario.**
+El servicio cloud puede manejar identidad, vinculación, presencia y metadata técnica de señalización. **El payload del usuario no pertenece al WebSocket/cloud del nuevo flujo.**
 
-## 4. Experiencia principal
+## 3. Experiencia principal
 
 ### Desde cualquier aplicación
 
-El usuario debe poder usar el menú nativo de compartir:
-
 **Compartir → OACLIX → elegir dispositivo vinculado → enviar.**
 
-OACLIX debe aspirar a recibir cualquier contenido que el sistema permita compartir, incluyendo:
-
-- texto;
-- imágenes;
-- videos;
-- PDF;
-- ZIP;
-- documentos;
-- archivos de otros formatos.
-
-El transporte debe tratar archivos de forma genérica cuando sea razonable, sin diseñar una implementación distinta para cada extensión.
+El primer flujo vertical es texto. Después de demostrarlo físicamente se ampliará el mismo contrato a imágenes y archivos genéricos.
 
 ### Desde OACLIX
 
 La aplicación debe permitir:
 
-- ver elementos recientes/locales gestionados por OACLIX;
+- ver contenido reciente/local;
 - ver contenido recibido;
-- buscar o seleccionar contenido del dispositivo mediante APIs/selector del sistema;
+- guardar o seleccionar contenido del dispositivo;
 - elegir un dispositivo vinculado y enviarlo;
-- usar **Compartir** para entregar un elemento a WhatsApp, Telegram, Gmail u otra app compatible mediante el share sheet nativo del sistema.
+- compartir un elemento hacia WhatsApp, Telegram, Gmail u otra app compatible mediante el share sheet nativo.
 
-OACLIX no controla qué conversación elige el usuario dentro de otra aplicación. Solo entrega correctamente el contenido al sistema de compartir.
+OACLIX no controla qué conversación elige el usuario dentro de otra app.
 
-## 5. Recepción
+## 4. Contrato de recepción de texto
 
-Cuando llega contenido:
+Para una transferencia directa de texto:
 
-- se guarda únicamente en el dispositivo receptor según el tipo y la acción correspondiente;
-- debe aparecer en recientes/historial local cuando aplique;
-- texto recibido debe quedar disponible en el portapapeles para pegar inmediatamente;
-- imágenes deben poder copiarse/pegarse cuando las APIs y la app destino lo soporten, y siempre permanecer disponibles localmente para abrir/compartir/guardar;
-- archivos deben poder abrirse, guardarse o volver a compartirse desde el dispositivo receptor.
+1. el receptor valida la transferencia;
+2. guarda el texto localmente;
+3. copia el texto al Android Clipboard;
+4. solo después responde ACK `stored` por DataChannel;
+5. el emisor muestra éxito únicamente después de recibir ese ACK real.
 
-No confundir "transferencia aceptada" con "transferencia terminada". La interfaz solo debe mostrar éxito cuando el contenido realmente llegó según el contrato de esa operación.
+Si la transferencia está vencida responde `expired`. Si el almacenamiento o el portapapeles requerido falla, responde `rejected` y el emisor no debe mostrar éxito.
 
-## 6. Interfaz nueva
+El guardado recibido es idempotente por `itemId`: un reintento idéntico no duplica contenido y una colisión distinta se rechaza.
 
-La interfaz anterior basada en salas/General **no define el nuevo producto**.
+## 5. Interfaz vigente
 
-La nueva experiencia debe priorizar, de manera simple:
+La interfaz nueva prioriza:
 
 - dispositivos vinculados;
 - recientes / historial local;
-- buscar o seleccionar contenido del móvil;
+- agregar o seleccionar contenido;
 - enviar;
 - compartir.
 
-No exponer al usuario conceptos técnicos de transporte.
+No exponer conceptos técnicos de transporte.
 
-### Fuera del MVP actual
+Fuera del MVP inmediato:
 
 - panel lateral flotante;
 - automatizaciones avanzadas;
@@ -116,175 +100,200 @@ No exponer al usuario conceptos técnicos de transporte.
 - relay/TURN de pago;
 - funciones decorativas que retrasen el flujo principal.
 
-El panel lateral puede reconsiderarse después de que el flujo principal funcione bien.
-
-## 7. Vinculación
+## 6. Vinculación
 
 El usuario vincula sus dispositivos una vez y luego los reconoce por una identidad/nombre comprensible.
 
-Después de vincular, el flujo cotidiano debe ser simplemente:
+Después de vincular, el flujo cotidiano debe ser:
 
 **contenido → dispositivo → enviar.**
 
-Los identificadores internos o mecanismos de coordinación pueden existir, pero no deben convertirse en "salas" visibles ni en pasos innecesarios para el usuario.
+Los identificadores y mecanismos internos de coordinación no deben convertirse en salas visibles ni pasos innecesarios.
 
-## 8. Seguridad y privacidad
+## 7. Seguridad y arquitectura
 
-- No exponer secretos, credenciales, claves privadas ni contenido real en logs.
-- Aislar correctamente dispositivos/usuarios.
-- Validar desde el lado confiable cualquier acción que afecte seguridad o datos.
-- Metadata técnica persistente debe ser mínima y tener limpieza/expiración cuando corresponda.
-- No registrar nombres privados, rutas locales, URIs sensibles o payload del usuario en telemetría innecesaria.
-- Mantener cifrado apropiado para el contenido en tránsito.
+- La identidad Android usa el material protegido por Keystore ya existente.
+- La señalización debe ser metadata-only.
+- `NativeDirectSignalProtocol` cubre presencia, `ready`, SDP e ICE.
+- `NativeDirectTextProtocol` cubre payload y ACK exclusivamente para DataChannel.
+- El peer LAN usa WebRTC/DataChannel cifrado y, en este gate, `iceServers = []`.
+- No hay TURN, relay pagado ni fallback cloud de contenido en el flujo Android directo.
+- El Android foreground debe tener **una sola sesión realtime por dispositivo**, para evitar que sockets concurrentes compitan por presencia/señales.
+- El WebSocket de esa sesión solo puede emitir frames `signal` válidos de SDP/ICE; no debe transportar texto ni ACK.
 
 `SECURITY.md` sigue siendo aplicable cuando no contradiga esta dirección.
 
-## 9. Qué hacer con el trabajo anterior
+## 8. Decisiones sustituidas o pospuestas
 
-Las ramas y PR antiguos pueden contener piezas reutilizables, por ejemplo:
+Quedan fuera del flujo Android activo del nuevo producto:
 
-- vinculación de dispositivos;
-- descubrimiento/presencia;
-- transporte directo;
-- WebRTC/DataChannel;
-- validación e integridad;
-- adaptadores de texto/imagen;
-- manejo de recepción;
-- seguridad y aislamiento.
+- destino visible `General`;
+- `NativeDeviceShareTransport` de texto por WebSocket cloud;
+- envío/recepción Android de imagen por relay cloud;
+- preparadores y políticas Android exclusivos de imagen por nube;
+- múltiples WebSockets realtime simultáneos por el mismo dispositivo.
 
-Pero deben evaluarse por utilidad para el nuevo flujo.
+El backend/PWA histórico todavía puede contener rutas legacy de relay. Eso **no las convierte en transporte aprobado para el nuevo Android** y no deben reutilizarse por inercia.
 
-**No continuar un checkpoint histórico por inercia.**
+Imágenes directas, archivos genéricos y P2P entre redes distintas se posponen hasta demostrar el flujo físico de texto LAN.
 
-Si una pieza añade complejidad sin acercar al usuario a:
+## 9. Checkpoints integrados
 
-**seleccionar → elegir dispositivo → enviar → recibir**, debe cuestionarse o retirarse.
+### Etapa A — experiencia nativa local
 
-## 10. Estado de desarrollo tras el cambio de dirección
+- PR #10: primera experiencia visible nativa integrada mediante checkpoint `880a59797adeaa27a488f805c0bde9bd62e79848`.
+- CI #154 verificó Web/Worker + Android después de integrar ese checkpoint.
+- PR #11 cerró la documentación de Etapa A.
 
-- Checkpoint estable de producto: PR #10, integrado mediante el commit `880a59797adeaa27a488f805c0bde9bd62e79848`; ese SHA identifica el checkpoint de producto, **no debe tratarse como el HEAD permanente de `main`**.
-- El HEAD real de `main` debe verificarse siempre en GitHub al iniciar o cerrar trabajo; commits documentales posteriores pueden moverlo sin cambiar la versión funcional del producto.
-- CI #154 sobre el checkpoint integrado quedó verde en Web/Worker y Android; Android completó `testDebugUnitTest` y `assembleDebug`.
-- PR #10 (`feat/native-mvp-home`) está integrado y cierra la primera experiencia visible nativa del nuevo rumbo.
-- PR #11 integró el cierre documental de esa Etapa A; no introduce cambios funcionales.
-- PR #2, #3, #4, #5, #6 y #7 están **cerrados como SUPERSEDED** y no son trabajo pendiente activo.
-- Las ramas históricas `docs/direct-transfer-research`, `feat/android-direct-image-native`, `feat/android-pwa-shell`, `feat/android-pwa-visual-parity`, `feat/functional-convergence-1`, `feat/transfer-control-plane` y `feat/transfer-engine` no definen el roadmap actual.
-- `scratch-do-not-use` no contiene trabajo oficial y no debe usarse.
-- El antiguo siguiente paso "Checkpoint 11: migrar imagen local a Transfer Engine" queda cancelado como siguiente paso oficial.
-- No fusionar automáticamente ramas o PR históricos porque estén verdes; primero decidir qué piezas siguen siendo útiles para el nuevo MVP.
-- Documentación antigua que exista dentro de ramas históricas es solo historial y no puede reemplazar esta fuente de verdad.
-- Etapa B inició en PR #13 (`feat/native-direct-text-stage-b`) desde `main` `f51883cbe93d36db9df770565695a98fe5a944c3`.
-- La auditoría de reutilización para texto está cerrada en `docs/STAGE_B_TEXT_AUDIT.md`: identidad/vinculación, roster, almacenamiento local, Android Clipboard y señalización técnica se reutilizan; las rutas de contenido por D1/WebSocket cloud no continúan como transporte del nuevo flujo.
-- PR #13 define dos contratos separados: `NativeDirectSignalProtocol` para metadata de presencia/SDP/ICE y `NativeDirectTextProtocol` para payload/ACK destinado exclusivamente al DataChannel.
-- CI #159 sobre PR #13 quedó verde en Web/Worker y Android, incluido `testDebugUnitTest` + `assembleDebug`.
+La Etapa A incluye:
 
-## 11. Nuevo MVP
+- pantalla principal nativa;
+- dispositivos vinculados visibles;
+- texto e imágenes locales;
+- copiar, compartir mediante share sheet nativo y eliminar;
+- botón `Agregar` para texto, portapapeles, imagen y vinculación.
 
-El MVP debe demostrar de extremo a extremo, de forma visible y probada:
+### Etapa B — contratos y peer directo
 
-1. vincular dos dispositivos;
-2. compartir/seleccionar un elemento;
-3. elegir el dispositivo receptor;
-4. transferir directamente sin almacenamiento cloud de contenido;
-5. recibir y guardar localmente;
-6. texto recibido disponible para pegar;
-7. volver a compartir contenido recibido mediante el sistema nativo.
+- PR #13 inició Etapa B y cerró la auditoría de reutilización en `docs/STAGE_B_TEXT_AUDIT.md`.
+- PR #13 separó señalización metadata-only de payload/ACK directo; CI #159 quedó verde.
+- PR #13 quedó integrado mediante `7acf915da3eb6b3039cfde0f3fd9da64115220dd`.
+- PR #14 añadió `NativeDirectTextPeerManager` con WebRTC/DataChannel LAN, sin TURN/relay y sin payload cloud.
+- PR #14 quedó integrado en `main` mediante `1477b7ec57b0ce9b3879e29bb13609d84b27f2e3`.
+- CI #163 verificó el `main` posterior a PR #14 en Web/Worker + Android.
 
-Primero debe funcionar un flujo vertical real antes de ampliar la interfaz o añadir extras.
+## 10. Checkpoint de desarrollo actual — PR #15
+
+PR #15, rama `feat/native-direct-text-realtime-session`, conecta el peer directo al flujo Android real:
+
+- una sola `NativeDirectTextSessionController` posee el WebSocket realtime durante el foreground;
+- el WebSocket se limita a identidad/presencia y señalización SDP/ICE;
+- el Share Sheet de texto lista dispositivos vinculados y usa `sendDirectText(...)`;
+- el payload y el ACK viajan únicamente por WebRTC DataChannel;
+- el receptor persiste de forma idempotente, copia al Android Clipboard y recién entonces responde `stored`;
+- el emisor solo completa con éxito al recibir `stored`;
+- el flujo Android visible ya no ofrece `General`;
+- las imágenes del Share Sheet quedan locales hasta implementar imagen directa;
+- se eliminaron transportes Android de payload cloud y helpers huérfanos relacionados.
+
+Verificación de implementación antes de esta actualización documental:
+
+- CI #186 sobre `b2402625cffa9a30a56481f10b1c095fd896d0ba`: **Web/Worker ✅ y Android `testDebugUnitTest + assembleDebug` ✅**.
+- La prueba física de dos Android en la misma LAN **todavía no se ha realizado** y no debe marcarse como completada.
+
+Estado integrado al momento de esta actualización:
+
+- `main`: `1477b7ec57b0ce9b3879e29bb13609d84b27f2e3` antes de integrar PR #15.
+- desarrollo: PR #15.
+- Siempre verificar GitHub en vivo antes de asumir que estos refs siguen siendo los últimos.
+
+## 11. Nuevo MVP — criterio de terminado
+
+El primer MVP dispositivo-a-dispositivo queda demostrado cuando, entre dos Android reales vinculados en la misma LAN:
+
+1. una app comparte texto hacia OACLIX;
+2. OACLIX permite elegir el dispositivo receptor;
+3. el texto viaja por DataChannel directo;
+4. el receptor lo guarda localmente;
+5. el receptor lo coloca en Android Clipboard;
+6. el receptor responde `stored` después de esos pasos;
+7. el emisor muestra éxito solo después del ACK;
+8. el texto aparece en recientes y puede pegarse/compartirse desde el receptor;
+9. no se observa payload de usuario transitando por el WebSocket/cloud.
+
+Ese gate físico es obligatorio antes de ampliar a imágenes, archivos o P2P entre redes distintas.
 
 ## 12. Siguiente paso exacto
 
-La Etapa A está cerrada. En Etapa B ya quedó cerrada y verificada la auditoría del primer flujo de texto y quedaron definidos los contratos de señalización metadata-only y de payload/ACK directo.
+Primero cerrar la integración de PR #15:
 
-El siguiente checkpoint exacto es **construir el peer nativo LAN específico de texto**:
+1. ejecutar CI final después de esta actualización de estado;
+2. verificar que `main` no cambió y que no existe trabajo paralelo conflictivo;
+3. marcar PR #15 listo e integrarlo solo con CI verde;
+4. verificar el CI posterior al merge en `main`.
 
-1. partir del `main` que resulte después de integrar PR #13 y volver a comprobar trabajo paralelo;
-2. añadir WebRTC con verificación de dependencia intacta; no desactivar controles de Gradle;
-3. usar inicialmente `iceServers = []` para demostrar conexión LAN directa sin TURN/relay;
-4. usar el backend existente únicamente para presencia + SDP/ICE de `NativeDirectSignalProtocol`;
-5. enviar `NativeDirectTextProtocol` únicamente por DataChannel; nunca por el WebSocket cloud;
-6. en el receptor, validar y guardar en `LocalClipboardHistory`, después copiar con `OaclixClipboardBridge`, y solo entonces responder ACK `stored`;
-7. el emisor no declara éxito sin ese ACK real;
-8. después de probar el peer por código/CI, conectar el selector ya existente del Android Share Sheet;
-9. cerrar el bloque con gate físico entre dos Android en la misma LAN.
+Después, el siguiente checkpoint de producto es **prueba física de texto entre dos Android reales en la misma LAN**:
 
-No exponer todavía envío desde las tarjetas locales hasta que este mismo contrato directo esté demostrado extremo a extremo. No incluir todavía imágenes, archivos genéricos, favoritos, panel, TURN ni relay de contenido.
+**Share Sheet → dispositivo vinculado → DataChannel directo → guardado local → Android Clipboard → ACK `stored` → éxito del emisor.**
 
-## 13. Regla para futuros chats
+Si esa prueba revela un fallo, reproducirlo y corregir la causa antes de continuar.
 
-Un chat nuevo debe:
+No comenzar imágenes directas, archivos genéricos, envío desde tarjetas, P2P entre redes, panel, TURN ni relay de contenido hasta cerrar este gate físico.
 
-1. leer este archivo;
-2. leer `CRITICAL_CHAT_CONTINUITY.md`;
-3. verificar `main` y CI;
-4. revisar PR/ramas abiertas;
-5. tratar PR/ramas de la dirección anterior como históricas salvo decisión explícita de reutilización;
-6. revisar el código real relacionado con el MVP;
-7. comprobar que el cierre del chat anterior documentó tanto el **estado técnico** como la **idea vigente**, sus decisiones y el plan restante;
-8. continuar desde el siguiente paso vigente de este archivo o de una actualización posterior ya integrada en `main`.
+## 13. Plan vivo
 
-**Está prohibido reconstruir el roadmap desde conversaciones antiguas, PR superseded o documentación de ramas históricas.**
-
-## 14. Plan vivo de la nueva idea
-
-Leyenda: `✅` hecho y verificado en su etapa; `⏳` en desarrollo o pendiente de verificación; `⬜` todavía no iniciado.
+Leyenda: `✅` hecho y verificado por código/CI; `⏳` activo o pendiente de verificación física; `⬜` no iniciado.
 
 ### Etapa A — primera experiencia visible en la APK
 
 - ✅ Dirección oficial local-first, sin nube de contenido y sin costo variable por transferencias.
-- ✅ Pantalla principal nativa nueva integrada desde PR #10.
-- ✅ Dispositivos vinculados reales visibles arriba y acceso a Vinculados.
-- ✅ Texto e imágenes locales mostrados como tarjetas con miniatura cuando aplica.
-- ✅ Acciones locales `Copiar`, `Compartir` mediante share sheet nativo y `Eliminar`.
-- ✅ Botón único `Agregar` con escribir texto, guardar desde portapapeles, elegir imagen y vincular dispositivo.
-- ✅ Compartir una tarjeta hacia WhatsApp, Telegram, Gmail u otra app compatible queda delegado al share sheet nativo; no se crean accesos directos específicos todavía.
-- ✅ Gate final Web/Worker + Android verde en CI #153 antes de integrar.
-- ✅ PR #10 integrado a `main` mediante el checkpoint `880a59797adeaa27a488f805c0bde9bd62e79848`.
-- ✅ Estado integrado verificado nuevamente en CI #154; Android ensambló `debug` correctamente.
-- ✅ Cierre documental de la etapa integrado mediante PR #11.
+- ✅ Pantalla principal nativa y dispositivos vinculados.
+- ✅ Texto e imágenes locales como tarjetas.
+- ✅ Copiar, compartir a otras apps y eliminar localmente.
+- ✅ Flujo `Agregar`.
+- ✅ PR #10 + cierre documental PR #11 integrados y verificados.
 
 ### Etapa B — primer flujo real dispositivo a dispositivo
 
-- ✅ Auditoría de vinculación, señalización, LAN/DataChannel, almacenamiento y recepción cerrada en PR #13.
-- ✅ Contratos separados para señalización metadata-only y texto/ACK directo definidos y verificados por CI #159.
-- ⏳ Peer nativo LAN de texto sobre DataChannel, sin payload cloud.
-- ⬜ Texto desde Android Share Sheet → elegir dispositivo vinculado → usar el peer directo.
-- ⬜ Receptor guarda localmente antes de confirmar éxito.
-- ⬜ Texto recibido queda en Android Clipboard listo para pegar.
-- ⬜ Emisor muestra éxito solo después del ACK real del receptor.
-- ⬜ Probar el flujo entre dos dispositivos Android reales en la misma LAN.
+- ✅ Auditoría de reutilización y contratos directos de PR #13.
+- ✅ Peer LAN nativo de texto sobre DataChannel de PR #14, sin TURN/relay.
+- ✅ Una sola sesión realtime Android para presencia + SDP/ICE, verificada por código/CI en PR #15.
+- ✅ Share Sheet de texto → dispositivo vinculado → peer directo, verificado por código/CI en PR #15.
+- ✅ Receptor guarda localmente antes de confirmar, verificado por código/tests.
+- ✅ Texto recibido se copia a Android Clipboard antes del ACK, verificado por código/tests.
+- ✅ Emisor completa éxito solo con ACK `stored`, verificado por código/tests.
+- ⏳ Integrar PR #15 y verificar CI de `main`.
+- ⬜ Probar el flujo completo entre dos Android reales en la misma LAN.
 
-### Etapa C — ampliar el mismo contrato sin duplicar arquitectura
+### Etapa C — ampliar el mismo contrato
 
-- ⬜ Reutilizar el flujo directo para imágenes.
-- ⬜ Tratar archivos genéricos con un transporte común cuando sea razonable: PDF, Word, Excel, APK, ZIP, video y otros tipos compartibles.
-- ⬜ P2P directo entre redes diferentes sin TURN/relay de pago en el MVP.
-- ⬜ Permitir enviar desde las tarjetas de la pantalla principal usando el mismo contrato ya probado.
+- ⬜ Reutilizar el transporte directo para imágenes.
+- ⬜ Tratar archivos genéricos con un transporte común: PDF, Word, Excel, APK, ZIP, video y otros tipos compartibles.
+- ⬜ P2P directo entre redes distintas sin TURN/relay de pago en el MVP.
+- ⬜ Permitir enviar desde las tarjetas locales usando el mismo contrato ya probado.
 
 ### Después del núcleo funcional
 
-- ⬜ Favoritos/fijados si aportan valor al uso diario.
-- ⬜ Accesos directos específicos a apps como WhatsApp/Telegram, solo si simplifican el flujo sin fragilidad innecesaria.
-- ⬜ Panel lateral u otras funciones avanzadas únicamente después de que el núcleo sea estable.
+- ⬜ Favoritos/fijados si aportan valor real.
+- ⬜ Accesos directos específicos a apps solo si simplifican el flujo sin fragilidad.
+- ⬜ Panel lateral u otras funciones avanzadas después de estabilizar el núcleo.
 
-Cada etapa significativa debe actualizar esta lista: lo terminado pasa a `✅`, lo activo a `⏳` y el siguiente paso exacto debe quedar escrito en la sección 12.
+## 14. Ramas y trabajo histórico
 
-## 15. Cierre conceptual obligatorio de cada chat
+PR #2, #3, #4, #5, #6 y #7 están cerrados como **SUPERSEDED** y no son trabajo pendiente activo.
 
-Antes de rotar de conversación, el repositorio debe dejar documentado **qué idea se definió y cómo terminarla**, no únicamente qué archivos cambiaron.
+Las ramas `docs/direct-transfer-research`, `feat/android-direct-image-native`, `feat/android-pwa-shell`, `feat/android-pwa-visual-parity`, `feat/functional-convergence-1`, `feat/transfer-control-plane` y `feat/transfer-engine` son históricas y no definen el roadmap actual.
 
-El cierre debe registrar como mínimo:
+`scratch-do-not-use` no contiene trabajo oficial.
 
-- la idea de producto vigente en palabras claras;
-- la experiencia de usuario acordada;
-- decisiones aprobadas y sus razones cuando importen;
-- decisiones sustituidas, descartadas o pospuestas;
-- restricciones de privacidad, seguridad, arquitectura y costos;
-- alcance actual y elementos fuera del alcance inmediato;
-- qué partes de la idea ya están `✅` resueltas y verificadas;
-- qué parte está `⏳` activa;
-- qué pasos `⬜` faltan, en orden lógico;
-- qué prueba o criterio convierte cada paso en terminado;
-- el siguiente paso exacto para continuar.
+No fusionar automáticamente trabajo histórico porque esté verde. Reutilizar únicamente piezas que acerquen al flujo vigente y después de auditar su encaje.
 
-Si durante un chat aparece una nueva idea o se modifica una anterior, el plan vivo debe actualizarse antes de cerrar el chat. **El siguiente chat debe poder entender qué estamos construyendo, por qué, qué falta y en qué orden, sin leer la conversación anterior.**
+## 15. Regla para futuros chats
+
+Un chat nuevo debe:
+
+1. leer este archivo y `CRITICAL_CHAT_CONTINUITY.md`;
+2. verificar `main`, CI, ramas activas, PR abiertos/recientes y commits recientes;
+3. revisar el código real de la tarea;
+4. distinguir checkpoint estable, desarrollo activo y prueba física pendiente;
+5. tratar ramas/PR de la dirección anterior como históricos salvo decisión explícita de reutilización;
+6. continuar desde el siguiente paso vigente, no desde memoria ni conversaciones antiguas.
+
+Está prohibido reconstruir el roadmap desde documentación histórica aislada.
+
+## 16. Cierre conceptual obligatorio
+
+Antes de rotar de conversación, el repositorio debe permitir entender sin el chat anterior:
+
+- qué producto se está construyendo;
+- cómo debe comportarse para el usuario;
+- decisiones aprobadas y descartadas;
+- privacidad, seguridad, arquitectura y costo;
+- qué está `✅`, qué está `⏳` y qué está `⬜`;
+- criterios de terminado;
+- ramas/PR activos relevantes;
+- checkpoint estable y desarrollo activo cuando sean distintos;
+- último CI relevante;
+- siguiente paso exacto.
+
+Cada etapa significativa debe actualizar este archivo antes de considerarse cerrada.

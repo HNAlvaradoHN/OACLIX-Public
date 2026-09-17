@@ -121,7 +121,7 @@ test('Android excluye datos privados completos de backup y transferencia', async
   }
 })
 
-test('Sharesheet recibe texto, .txt o imagen; texto conserva prioridad de archivo y progreso', async () => {
+test('Sharesheet recibe texto, .txt o imagen; texto conserva prioridad de archivo y envío directo', async () => {
   const [manifest, receiver, layout, strings] = await Promise.all([
     readAndroid('app/src/main/AndroidManifest.xml'),
     readAndroid('app/src/main/java/app/oaclix/android/ShareReceiverActivity.kt'),
@@ -145,9 +145,11 @@ test('Sharesheet recibe texto, .txt o imagen; texto conserva prioridad de archiv
   assert.match(receiver, /confirmButton = findViewById\(R\.id\.share_save_button\)/)
   assert.match(receiver, /confirmButton\.setOnClickListener \{ confirmSharedContent\(\) \}/)
   assert.match(receiver, /history\.save\(text\)/)
-  assert.match(receiver, /NativeGeneralShareTransport\(baseUrl\)\.send\(text\)/)
+  assert.match(receiver, /app\.sendDirectText\(destination\.deviceId, text\)/)
+  assert.doesNotMatch(receiver, /NativeGeneralShareTransport|NativeDeviceShareTransport|device-transfer/)
   assert.match(strings, /name="share_loading_file">Leyendo archivo…/)
   assert.match(strings, /name="share_saving">Guardando…/)
+  assert.match(strings, /name="share_sending">Enviando directamente…/)
   assert.doesNotMatch(receiver, /startActivity\(/)
   assert.doesNotMatch(layout, /android:maxLength=/)
 })

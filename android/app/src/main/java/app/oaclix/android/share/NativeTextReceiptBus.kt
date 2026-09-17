@@ -2,7 +2,7 @@ package app.oaclix.android.share
 
 import java.util.concurrent.CopyOnWriteArraySet
 
-internal object NativeImageReceiptBus {
+internal object NativeTextReceiptBus {
     private val listeners = CopyOnWriteArraySet<() -> Unit>()
 
     fun subscribe(listener: () -> Unit): AutoCloseable {

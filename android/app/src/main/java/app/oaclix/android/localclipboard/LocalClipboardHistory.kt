@@ -41,6 +41,23 @@ class LocalClipboardHistory(context: Context) {
         }
     }
 
+    fun saveReceived(
+        text: String,
+        itemId: String,
+        senderDeviceId: String,
+        createdAt: Long,
+        expiresAt: Long,
+    ): LocalClipboardEntry.Inline {
+        val item = LocalClipboardPolicy.createReceived(
+            text = text,
+            itemId = itemId,
+            senderDeviceId = senderDeviceId,
+            createdAt = createdAt,
+            expiresAt = expiresAt,
+        )
+        return LocalClipboardEntry.Inline(repository.storeReceived(item))
+    }
+
     fun read(entry: LocalClipboardEntry, now: Long = System.currentTimeMillis()): String = when (entry) {
         is LocalClipboardEntry.Inline -> entry.item.text
         is LocalClipboardEntry.TextFile -> fileStore.read(entry.item, now)

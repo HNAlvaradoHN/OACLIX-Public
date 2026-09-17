@@ -30,7 +30,7 @@ class NativeShareDestinationSourceTest {
     }
 
     @Test
-    fun `loads General and linked devices into resolver`() {
+    fun `loads linked devices into resolver`() {
         var currentCalls = 0
         var linkedCalls = 0
         val source = NativeShareDestinationSource(
@@ -56,13 +56,13 @@ class NativeShareDestinationSourceTest {
         assertEquals(1, currentCalls)
         assertEquals(1, linkedCalls)
         assertEquals(
-            listOf("local", "general", "device:dev_tablet1234567890"),
+            listOf("local", "device:dev_tablet1234567890"),
             result.map { it.stableId },
         )
     }
 
     @Test
-    fun `empty linked-device list still exposes local and General`() {
+    fun `empty linked-device list exposes only local clipboard`() {
         val source = NativeShareDestinationSource(
             bootstrapIdentity = {},
             currentDeviceId = { "dev_current123456789" },
@@ -75,10 +75,7 @@ class NativeShareDestinationSourceTest {
         )
 
         assertEquals(
-            listOf(
-                NativeShareDestination.LocalClipboard,
-                NativeShareDestination.GeneralRoom,
-            ),
+            listOf(NativeShareDestination.LocalClipboard),
             source.load(),
         )
     }

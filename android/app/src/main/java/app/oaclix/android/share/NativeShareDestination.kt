@@ -11,11 +11,6 @@ internal sealed interface NativeShareDestination {
         override val label: String = "Mi portapapeles"
     }
 
-    data object GeneralRoom : NativeShareDestination {
-        override val stableId: String = "general"
-        override val label: String = "General"
-    }
-
     data class LinkedDevice(
         val deviceId: String,
         override val label: String,
@@ -46,7 +41,6 @@ internal object NativeShareDestinationResolver {
 
         return buildList {
             add(NativeShareDestination.LocalClipboard)
-            add(NativeShareDestination.GeneralRoom)
             addAll(remoteDevices)
         }
     }

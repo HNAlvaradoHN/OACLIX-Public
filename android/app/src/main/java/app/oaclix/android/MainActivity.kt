@@ -26,7 +26,7 @@ import app.oaclix.android.imageclipboard.ImageClipboardStore
 import app.oaclix.android.imageclipboard.ImageThumbnailDecoder
 import app.oaclix.android.localclipboard.LocalClipboardEntry
 import app.oaclix.android.localclipboard.LocalClipboardHistory
-import app.oaclix.android.share.NativeImageReceiptBus
+import app.oaclix.android.share.NativeTextReceiptBus
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import kotlin.math.ceil
@@ -41,7 +41,7 @@ class MainActivity : Activity() {
     private lateinit var ioExecutor: ExecutorService
     private val identity = AndroidKeystoreDeviceIdentity()
     private var currentDeviceId = ""
-    private var imageReceiptSubscription: AutoCloseable? = null
+    private var textReceiptSubscription: AutoCloseable? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -62,11 +62,11 @@ class MainActivity : Activity() {
 
     override fun onStart() {
         super.onStart()
-        imageReceiptSubscription?.close()
-        imageReceiptSubscription = NativeImageReceiptBus.subscribe {
+        textReceiptSubscription?.close()
+        textReceiptSubscription = NativeTextReceiptBus.subscribe {
             runOnUiThread {
                 if (isDestroyed || isFinishing) return@runOnUiThread
-                toast(getString(R.string.image_received))
+                toast(getString(R.string.text_received))
                 loadItems()
             }
         }
@@ -79,14 +79,14 @@ class MainActivity : Activity() {
     }
 
     override fun onStop() {
-        imageReceiptSubscription?.close()
-        imageReceiptSubscription = null
+        textReceiptSubscription?.close()
+        textReceiptSubscription = null
         super.onStop()
     }
 
     override fun onDestroy() {
-        imageReceiptSubscription?.close()
-        imageReceiptSubscription = null
+        textReceiptSubscription?.close()
+        textReceiptSubscription = null
         if (::ioExecutor.isInitialized) ioExecutor.shutdown()
         super.onDestroy()
     }
