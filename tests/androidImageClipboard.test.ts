@@ -70,7 +70,7 @@ test('Mi portapapeles imports images, shows real thumbnails and copies them back
   assert.match(rowLayout, /android:visibility="gone"/)
   assert.match(decoder, /BitmapFactory\.Options\(\)\.apply \{ inJustDecodeBounds = true \}/)
   assert.match(decoder, /inSampleSize = sampleSize/)
-  assert.match(strings, /name="image_item_preview">Imagen\\n%1\$s · %2\$s</)
+  assert.match(strings, /name="image_item_preview">%1\$s · %2\$s</)
   assert.match(strings, /name="image_copied">Imagen copiada · lista para Pegar</)
 })
 

@@ -1,10 +1,12 @@
 package app.oaclix.android
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.view.View
@@ -14,6 +16,11 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import app.oaclix.android.connection.NativeBackendConfig
+import app.oaclix.android.identity.AndroidKeystoreDeviceIdentity
+import app.oaclix.android.identity.NativeLinkedDeviceSnapshot
+import app.oaclix.android.identity.NativeLinkedDevicesSnapshot
+import app.oaclix.android.identity.NativeLinkingFlow
 import app.oaclix.android.imageclipboard.ImageClipboardItem
 import app.oaclix.android.imageclipboard.ImageClipboardStore
 import app.oaclix.android.imageclipboard.ImageThumbnailDecoder
@@ -27,10 +34,13 @@ import kotlin.math.ceil
 class MainActivity : Activity() {
     private lateinit var history: LocalClipboardHistory
     private lateinit var imageStore: ImageClipboardStore
-    private lateinit var input: EditText
     private lateinit var emptyState: TextView
     private lateinit var itemsContainer: LinearLayout
+    private lateinit var devicesContainer: LinearLayout
+    private lateinit var devicesStatus: TextView
     private lateinit var ioExecutor: ExecutorService
+    private val identity = AndroidKeystoreDeviceIdentity()
+    private var currentDeviceId = ""
     private var imageReceiptSubscription: AutoCloseable? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -40,15 +50,14 @@ class MainActivity : Activity() {
         history = LocalClipboardHistory(this)
         imageStore = ImageClipboardStore(this)
         ioExecutor = Executors.newSingleThreadExecutor()
-        input = findViewById(R.id.local_text_input)
         emptyState = findViewById(R.id.empty_state)
         itemsContainer = findViewById(R.id.items_container)
+        devicesContainer = findViewById(R.id.linked_devices_shortcuts)
+        devicesStatus = findViewById(R.id.devices_status)
+        currentDeviceId = identity.getOrCreateSnapshot().deviceId
 
-        findViewById<Button>(R.id.link_device_open_button).setOnClickListener {
-            startActivity(Intent(this, LinkDeviceActivity::class.java))
-        }
-        findViewById<Button>(R.id.paste_button).setOnClickListener { pasteFromSystemClipboard() }
-        findViewById<Button>(R.id.save_button).setOnClickListener { saveCurrentText() }
+        findViewById<Button>(R.id.manage_devices_button).setOnClickListener { openLinkedDevices() }
+        findViewById<Button>(R.id.send_something_button).setOnClickListener { showAddContentMenu() }
     }
 
     override fun onStart() {
@@ -57,7 +66,7 @@ class MainActivity : Activity() {
         imageReceiptSubscription = NativeImageReceiptBus.subscribe {
             runOnUiThread {
                 if (isDestroyed || isFinishing) return@runOnUiThread
-                toast(getString(R.string.image_received_cloud))
+                toast(getString(R.string.image_received))
                 loadItems()
             }
         }
@@ -66,6 +75,7 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         if (::history.isInitialized && ::imageStore.isInitialized) loadItems()
+        if (::devicesContainer.isInitialized) loadLinkedDevices()
     }
 
     override fun onStop() {
@@ -81,16 +91,169 @@ class MainActivity : Activity() {
         super.onDestroy()
     }
 
-    private fun saveCurrentText() {
-        val text = input.text.toString()
+    @Deprecated("Deprecated in Android; retained for the small local picker until Activity Result is introduced.")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != PICK_IMAGE_REQUEST || resultCode != RESULT_OK) return
+        val uri = data?.data ?: return
+        importImage(uri, getString(R.string.home_image_selected))
+    }
+
+    private fun openLinkedDevices() {
+        startActivity(Intent(this, LinkDeviceActivity::class.java))
+    }
+
+    private fun showAddContentMenu() {
+        val actions = arrayOf(
+            getString(R.string.home_add_write_text),
+            getString(R.string.home_add_clipboard),
+            getString(R.string.home_add_image),
+            getString(R.string.home_add_link_device),
+        )
+        AlertDialog.Builder(this)
+            .setTitle(R.string.home_add_content)
+            .setItems(actions) { _, which ->
+                when (which) {
+                    0 -> showWriteTextDialog()
+                    1 -> saveFromSystemClipboard()
+                    2 -> chooseImage()
+                    3 -> openLinkedDevices()
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun showWriteTextDialog() {
+        val input = EditText(this).apply {
+            hint = getString(R.string.home_write_text_hint)
+            minLines = 4
+            maxLines = 8
+            setPadding(dp(18), dp(14), dp(18), dp(14))
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(R.string.home_write_text_title)
+            .setView(input)
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.save, null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val text = input.text?.toString().orEmpty()
+                if (text.isBlank()) {
+                    input.error = getString(R.string.share_text_required)
+                    return@setOnClickListener
+                }
+                runStorage(
+                    task = { history.save(text) },
+                    onSuccess = {
+                        dialog.dismiss()
+                        toast(getString(R.string.saved_local))
+                        loadItems()
+                    },
+                )
+            }
+        }
+        dialog.show()
+    }
+
+    private fun chooseImage() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "image/*"
+        }
+        @Suppress("DEPRECATION")
+        startActivityForResult(intent, PICK_IMAGE_REQUEST)
+    }
+
+    private fun saveFromSystemClipboard() {
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = clipboard.primaryClip
+        if (clip == null || clip.itemCount == 0) {
+            toast(getString(R.string.nothing_to_paste))
+            return
+        }
+
+        val item = clip.getItemAt(0)
+        val uri = item.uri
+        val mimeType = uri?.let { runCatching { contentResolver.getType(it) }.getOrNull() }
+        if (uri != null && mimeType?.startsWith("image/") == true) {
+            importImage(uri, getString(R.string.home_saved_from_clipboard))
+            return
+        }
+
+        val text = item.coerceToText(this)?.toString().orEmpty()
+        if (text.isBlank()) {
+            toast(getString(R.string.nothing_to_paste))
+            return
+        }
+
         runStorage(
             task = { history.save(text) },
             onSuccess = {
-                input.text.clear()
-                toast(getString(R.string.saved_local))
+                toast(getString(R.string.home_saved_from_clipboard))
                 loadItems()
             },
         )
+    }
+
+    private fun loadLinkedDevices() {
+        val baseUrl = NativeBackendConfig.resolve(this)
+        if (baseUrl.isBlank()) {
+            devicesStatus.setText(R.string.home_devices_unavailable)
+            renderLinkedDevices(null)
+            return
+        }
+
+        devicesStatus.setText(R.string.home_devices_loading)
+        ioExecutor.execute {
+            val result = runCatching { NativeLinkingFlow(baseUrl, identity).load() }
+            runOnUiThread {
+                if (isDestroyed || isFinishing) return@runOnUiThread
+                result.onSuccess { roster ->
+                    currentDeviceId = identity.getOrCreateSnapshot().deviceId
+                    renderLinkedDevices(roster)
+                    val remoteCount = roster.devices.count { it.id != currentDeviceId }
+                    devicesStatus.text = if (remoteCount > 0) {
+                        resources.getQuantityString(R.plurals.home_devices_ready, remoteCount, remoteCount)
+                    } else {
+                        getString(R.string.home_devices_empty)
+                    }
+                }.onFailure {
+                    devicesStatus.setText(R.string.home_devices_failed)
+                    renderLinkedDevices(null)
+                }
+            }
+        }
+    }
+
+    private fun renderLinkedDevices(roster: NativeLinkedDevicesSnapshot?) {
+        devicesContainer.removeAllViews()
+        roster?.devices
+            ?.filter { it.id != currentDeviceId }
+            ?.sortedBy { it.label.lowercase() }
+            ?.forEach(::addDeviceShortcut)
+        addLinkShortcut()
+    }
+
+    private fun addDeviceShortcut(device: NativeLinkedDeviceSnapshot) {
+        val tile = layoutInflater.inflate(R.layout.item_linked_device_shortcut, devicesContainer, false)
+        val initial = tile.findViewById<TextView>(R.id.device_shortcut_initial)
+        val label = tile.findViewById<TextView>(R.id.device_shortcut_label)
+        initial.text = device.label.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "•"
+        label.text = device.label
+        tile.contentDescription = getString(R.string.home_device_open) + ": " + device.label
+        tile.setOnClickListener { openLinkedDevices() }
+        devicesContainer.addView(tile)
+    }
+
+    private fun addLinkShortcut() {
+        val tile = layoutInflater.inflate(R.layout.item_linked_device_shortcut, devicesContainer, false)
+        tile.findViewById<TextView>(R.id.device_shortcut_initial).text = "+"
+        tile.findViewById<TextView>(R.id.device_shortcut_label).setText(R.string.home_add_link_device)
+        tile.contentDescription = getString(R.string.home_add_link_device)
+        tile.setOnClickListener { openLinkedDevices() }
+        devicesContainer.addView(tile)
     }
 
     private fun loadItems() {
@@ -112,14 +275,18 @@ class MainActivity : Activity() {
         for (displayItem in items) {
             val row = layoutInflater.inflate(R.layout.item_local_clipboard, itemsContainer, false)
             val imagePreview = row.findViewById<ImageView>(R.id.item_image_preview)
+            val typeBadge = row.findViewById<TextView>(R.id.item_type_badge)
             val preview = row.findViewById<TextView>(R.id.item_preview)
             val expiry = row.findViewById<TextView>(R.id.item_expiry)
             val copy = row.findViewById<Button>(R.id.copy_button)
+            val share = row.findViewById<Button>(R.id.share_button)
             val delete = row.findViewById<Button>(R.id.delete_button)
 
             when (displayItem) {
                 is ClipboardDisplayItem.Text -> {
                     imagePreview.visibility = View.GONE
+                    typeBadge.visibility = View.VISIBLE
+                    typeBadge.text = "TXT"
                     preview.text = when (val item = displayItem.item) {
                         is LocalClipboardEntry.Inline -> item.item.text
                         is LocalClipboardEntry.TextFile -> getString(
@@ -129,10 +296,12 @@ class MainActivity : Activity() {
                         )
                     }
                     copy.setOnClickListener { copyTextItem(displayItem.item) }
+                    share.setOnClickListener { shareTextItem(displayItem.item) }
                     delete.setOnClickListener { deleteTextItem(displayItem.item) }
                 }
 
                 is ClipboardDisplayItem.Image -> {
+                    typeBadge.visibility = View.GONE
                     imagePreview.visibility = View.VISIBLE
                     imagePreview.setImageResource(android.R.drawable.ic_menu_gallery)
                     preview.text = getString(
@@ -142,6 +311,7 @@ class MainActivity : Activity() {
                     )
                     bindImageThumbnail(imagePreview, displayItem.item)
                     copy.setOnClickListener { copyImageItem(displayItem.item) }
+                    share.setOnClickListener { shareImageItem(displayItem.item) }
                     delete.setOnClickListener { deleteImageItem(displayItem.item) }
                 }
             }
@@ -176,6 +346,21 @@ class MainActivity : Activity() {
         )
     }
 
+    private fun shareTextItem(item: LocalClipboardEntry) {
+        runStorage(
+            task = { history.read(item) },
+            onSuccess = ::shareText,
+        )
+    }
+
+    private fun shareText(text: String) {
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, text)
+        }
+        startActivity(Intent.createChooser(intent, getString(R.string.share_out_title)))
+    }
+
     private fun deleteTextItem(item: LocalClipboardEntry) {
         runStorage(
             task = { history.delete(item) },
@@ -194,6 +379,17 @@ class MainActivity : Activity() {
         toast(getString(R.string.image_copied))
     }
 
+    private fun shareImageItem(item: ImageClipboardItem) {
+        val uri = imageStore.contentUri(item)
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = item.mimeType
+            putExtra(Intent.EXTRA_STREAM, uri)
+            clipData = ClipData.newUri(contentResolver, getString(R.string.image_clip_label), uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivity(Intent.createChooser(intent, getString(R.string.share_out_title)))
+    }
+
     private fun deleteImageItem(item: ImageClipboardItem) {
         runStorage(
             task = { imageStore.delete(item) },
@@ -209,37 +405,11 @@ class MainActivity : Activity() {
         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) toast(getString(R.string.copied))
     }
 
-    private fun pasteFromSystemClipboard() {
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = clipboard.primaryClip
-        if (clip == null || clip.itemCount == 0) {
-            toast(getString(R.string.nothing_to_paste))
-            return
-        }
-
-        val item = clip.getItemAt(0)
-        val uri = item.uri
-        val mimeType = uri?.let { runCatching { contentResolver.getType(it) }.getOrNull() }
-        if (uri != null && mimeType?.startsWith("image/") == true) {
-            importImage(uri)
-            return
-        }
-
-        val text = item.coerceToText(this)?.toString().orEmpty()
-        if (text.isBlank()) {
-            toast(getString(R.string.nothing_to_paste))
-            return
-        }
-
-        input.setText(text)
-        input.setSelection(input.text.length)
-    }
-
-    private fun importImage(uri: android.net.Uri) {
+    private fun importImage(uri: Uri, successMessage: String) {
         runStorage(
             task = { imageStore.createFromUri(uri) },
             onSuccess = {
-                toast(getString(R.string.image_saved_local))
+                toast(successMessage)
                 loadItems()
             },
         )
@@ -318,5 +488,6 @@ class MainActivity : Activity() {
 
     companion object {
         private const val LOCAL_IMAGE_THUMBNAIL_DECODE_DP = 112
+        private const val PICK_IMAGE_REQUEST = 3101
     }
 }

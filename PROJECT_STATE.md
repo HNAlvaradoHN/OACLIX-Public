@@ -167,6 +167,7 @@ Si una pieza añade complejidad sin acercar al usuario a:
 - Las ramas históricas `docs/direct-transfer-research`, `feat/android-direct-image-native`, `feat/android-pwa-shell`, `feat/android-pwa-visual-parity`, `feat/functional-convergence-1`, `feat/transfer-control-plane` y `feat/transfer-engine` no definen el roadmap actual.
 - `scratch-do-not-use` no contiene trabajo oficial y no debe usarse.
 - El antiguo siguiente paso "Checkpoint 11: migrar imagen local a Transfer Engine" queda cancelado como siguiente paso oficial.
+- PR #10 (`feat/native-mvp-home`) es el trabajo activo de la nueva interfaz nativa y todavía no es versión estable mientras no pase CI y se integre a `main`.
 - No fusionar automáticamente ramas o PR históricos porque estén verdes; primero decidir qué piezas siguen siendo útiles para el nuevo MVP.
 - Documentación antigua que exista dentro de ramas históricas es solo historial y no puede reemplazar esta fuente de verdad.
 
@@ -186,27 +187,92 @@ Primero debe funcionar un flujo vertical real antes de ampliar la interfaz o añ
 
 ## 12. Siguiente paso exacto
 
-Antes de escribir la nueva interfaz, hacer una **auditoría de reutilización** del código existente contra este MVP y clasificar cada componente relevante como:
+Cerrar primero el checkpoint visible de PR #10:
 
-- reutilizar;
-- adaptar;
-- eliminar/no continuar.
+1. corregir únicamente los fallos reales o pruebas obsoletas detectadas por CI;
+2. exigir Web/Worker + Android verdes;
+3. integrar PR #10 a `main` solo después de esa verificación;
+4. confirmar la APK construida desde el estado integrado.
 
-Después, implementar el primer flujo visible mínimo:
+Después, el siguiente bloque técnico será una **auditoría de reutilización enfocada únicamente en el flujo vertical de texto** y la implementación de:
 
-**Android Share Sheet → OACLIX → elegir dispositivo vinculado → transferencia directa → receptor → texto en portapapeles / archivo disponible localmente.**
+**Android Share Sheet → OACLIX → elegir dispositivo vinculado → transferencia directa → receptor → guardar local → texto disponible en portapapeles → ACK real de recepción.**
 
-Empezar por el caso mínimo que permita comprobar el flujo real de extremo a extremo. No construir panel lateral ni funciones avanzadas antes de esa prueba.
+No exponer todavía envío desde las tarjetas locales hasta que el mismo transporte directo esté demostrado extremo a extremo. No construir panel lateral, archivos genéricos, favoritos ni accesos directos a apps antes de esa prueba.
 
 ## 13. Regla para futuros chats
 
 Un chat nuevo debe:
 
 1. leer este archivo;
-2. verificar `main` y CI;
-3. revisar PR/ramas abiertas;
-4. tratar PR/ramas de la dirección anterior como históricas salvo decisión explícita de reutilización;
-5. revisar el código real relacionado con el MVP;
-6. continuar desde el siguiente paso vigente de este archivo o de una actualización posterior ya integrada en `main`.
+2. leer `CRITICAL_CHAT_CONTINUITY.md`;
+3. verificar `main` y CI;
+4. revisar PR/ramas abiertas;
+5. tratar PR/ramas de la dirección anterior como históricas salvo decisión explícita de reutilización;
+6. revisar el código real relacionado con el MVP;
+7. comprobar que el cierre del chat anterior documentó tanto el **estado técnico** como la **idea vigente**, sus decisiones y el plan restante;
+8. continuar desde el siguiente paso vigente de este archivo o de una actualización posterior ya integrada en `main`.
 
 **Está prohibido reconstruir el roadmap desde conversaciones antiguas, PR superseded o documentación de ramas históricas.**
+
+## 14. Plan vivo de la nueva idea
+
+Leyenda: `✅` hecho y verificado en su etapa; `⏳` en desarrollo o pendiente de verificación; `⬜` todavía no iniciado.
+
+### Etapa A — primera experiencia visible en la APK
+
+- ✅ Dirección oficial local-first, sin nube de contenido y sin costo variable por transferencias.
+- ✅ Pantalla principal nativa nueva implementada en PR #10.
+- ✅ Dispositivos vinculados reales visibles arriba y acceso a Vinculados.
+- ✅ Texto e imágenes locales mostrados como tarjetas con miniatura cuando aplica.
+- ✅ Acciones locales `Copiar`, `Compartir` mediante share sheet nativo y `Eliminar`.
+- ✅ Botón único `Agregar` con escribir texto, guardar desde portapapeles, elegir imagen y vincular dispositivo.
+- ✅ Compartir una tarjeta hacia WhatsApp, Telegram, Gmail u otra app compatible queda delegado al share sheet nativo; no se crean accesos directos específicos todavía.
+- ⏳ Gate final de CI Web/Worker + Android para PR #10.
+- ⬜ Integrar PR #10 a `main` y tratar esa interfaz como estable.
+- ⬜ Generar/verificar APK del estado integrado para prueba manual visible.
+
+### Etapa B — primer flujo real dispositivo a dispositivo
+
+- ⬜ Auditar piezas reutilizables de vinculación, LAN/DataChannel, integridad y recepción sin recuperar el roadmap viejo.
+- ⬜ Texto desde Android Share Sheet → elegir dispositivo vinculado.
+- ⬜ Transferencia directa LAN sin almacenar contenido en nube.
+- ⬜ Receptor guarda localmente antes de confirmar éxito.
+- ⬜ Texto recibido queda en Android Clipboard listo para pegar.
+- ⬜ Emisor muestra éxito solo después del ACK real del receptor.
+- ⬜ Probar el flujo entre dos dispositivos reales.
+
+### Etapa C — ampliar el mismo contrato sin duplicar arquitectura
+
+- ⬜ Reutilizar el flujo directo para imágenes.
+- ⬜ Tratar archivos genéricos con un transporte común cuando sea razonable: PDF, Word, Excel, APK, ZIP, video y otros tipos compartibles.
+- ⬜ P2P directo entre redes diferentes sin TURN/relay de pago en el MVP.
+- ⬜ Permitir enviar desde las tarjetas de la pantalla principal usando el mismo contrato ya probado.
+
+### Después del núcleo funcional
+
+- ⬜ Favoritos/fijados si aportan valor al uso diario.
+- ⬜ Accesos directos específicos a apps como WhatsApp/Telegram, solo si simplifican el flujo sin fragilidad innecesaria.
+- ⬜ Panel lateral u otras funciones avanzadas únicamente después de que el núcleo sea estable.
+
+Cada etapa significativa debe actualizar esta lista: lo terminado pasa a `✅`, lo activo a `⏳` y el siguiente paso exacto debe quedar escrito en la sección 12.
+
+## 15. Cierre conceptual obligatorio de cada chat
+
+Antes de rotar de conversación, el repositorio debe dejar documentado **qué idea se definió y cómo terminarla**, no únicamente qué archivos cambiaron.
+
+El cierre debe registrar como mínimo:
+
+- la idea de producto vigente en palabras claras;
+- la experiencia de usuario acordada;
+- decisiones aprobadas y sus razones cuando importen;
+- decisiones sustituidas, descartadas o pospuestas;
+- restricciones de privacidad, seguridad, arquitectura y costos;
+- alcance actual y elementos fuera del alcance inmediato;
+- qué partes de la idea ya están `✅` resueltas y verificadas;
+- qué parte está `⏳` activa;
+- qué pasos `⬜` faltan, en orden lógico;
+- qué prueba o criterio convierte cada paso en terminado;
+- el siguiente paso exacto para continuar.
+
+Si durante un chat aparece una nueva idea o se modifica una anterior, el plan vivo debe actualizarse antes de cerrar el chat. **El siguiente chat debe poder entender qué estamos construyendo, por qué, qué falta y en qué orden, sin leer la conversación anterior.**

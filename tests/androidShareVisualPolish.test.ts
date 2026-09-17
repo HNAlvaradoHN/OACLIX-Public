@@ -61,7 +61,7 @@ test('destinos y acciones del Sharesheet tienen estados táctiles propios', asyn
   assert.match(secondary, /<ripple/)
 })
 
-test('Mi portapapeles Android reutiliza estilos visuales OACLIX en acciones y editor', async () => {
+test('pantalla principal Android reutiliza estilos visuales OACLIX en tarjetas y acciones', async () => {
   const [layout, itemLayout, styles] = await Promise.all([
     read('android/app/src/main/res/layout/activity_main.xml'),
     read('android/app/src/main/res/layout/item_local_clipboard.xml'),
@@ -74,7 +74,10 @@ test('Mi portapapeles Android reutiliza estilos visuales OACLIX en acciones y ed
   assert.match(styles, /android:textAllCaps">false/)
   assert.match(layout, /style="@style\/Widget\.Oaclix\.Button\.Primary"/)
   assert.match(layout, /style="@style\/Widget\.Oaclix\.Button\.Secondary"/)
-  assert.match(layout, /@drawable\/share_editor_background/)
+  assert.match(layout, /@drawable\/local_item_background/)
+  assert.match(layout, /@\+id\/linked_devices_shortcuts/)
+  assert.match(layout, /@\+id\/items_container/)
   assert.doesNotMatch(layout, /android:backgroundTint="@color\/oaclix_accent"/)
+  assert.match(itemLayout, /style="@style\/Widget\.Oaclix\.Button\.Secondary"/)
   assert.match(itemLayout, /style="@style\/Widget\.Oaclix\.Button\.Danger"/)
 })
