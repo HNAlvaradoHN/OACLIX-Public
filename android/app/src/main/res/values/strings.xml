@@ -34,6 +34,10 @@
     <string name="home_devices_empty">Vincula otro dispositivo para verlo aquí.</string>
     <string name="home_devices_unavailable">Los dispositivos aparecerán aquí cuando OACLIX esté vinculado.</string>
     <string name="home_devices_failed">No se pudieron actualizar los dispositivos. Tu contenido local sigue disponible.</string>
+    <plurals name="home_devices_ready">
+        <item quantity="one">%d dispositivo vinculado disponible</item>
+        <item quantity="other">%d dispositivos vinculados disponibles</item>
+    </plurals>
     <string name="home_my_content">Tus cosas</string>
     <string name="home_my_content_hint">Texto e imágenes guardados en este dispositivo</string>
     <string name="home_empty">Todavía no hay nada aquí. Usa Agregar para guardar texto o una imagen.</string>

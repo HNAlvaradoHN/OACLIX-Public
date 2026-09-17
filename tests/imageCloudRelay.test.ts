@@ -125,7 +125,7 @@ test('Android image reception is foreground-scoped at application level and sepa
   assert.doesNotMatch(mainActivity, /imageRelayController\.start\(\)/)
   assert.doesNotMatch(mainActivity, /imageRelayController\.stop\(\)/)
   assert.match(mainActivity, /NativeImageReceiptBus/)
-  assert.match(mainActivity, /R\.string\.image_received_cloud/)
+  assert.match(mainActivity, /R\.string\.image_received/)
 })
 
 test('cloud optimization is a separate stable copy and the PWA exposes stored received images locally', async () => {

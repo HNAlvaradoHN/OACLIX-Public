@@ -71,20 +71,25 @@ test('Mi portapapeles conserva 8.000 inline y usa .txt privado para texto largo'
   assert.match(fileStore, /CodingErrorAction\.REPORT/)
 })
 
-test('copiar y pegar son acciones visibles y un pegado largo nunca se recorta silenciosamente', async () => {
-  const [activity, bridge, layout] = await Promise.all([
+test('copiar y guardar desde portapapeles siguen visibles sin recortar texto largo', async () => {
+  const [activity, bridge, layout, strings] = await Promise.all([
     readAndroid('app/src/main/java/app/oaclix/android/MainActivity.kt'),
     readAndroid('app/src/main/java/app/oaclix/android/OaclixClipboardBridge.kt'),
     readAndroid('app/src/main/res/layout/activity_main.xml'),
+    readAndroid('app/src/main/res/values/strings.xml'),
   ])
   assert.match(activity, /ClipboardManager/)
-  assert.match(activity, /paste_button\)\.setOnClickListener/)
+  assert.match(activity, /private fun saveFromSystemClipboard\(\)/)
+  assert.match(activity, /getString\(R\.string\.home_add_clipboard\)/)
+  assert.match(activity, /item\.coerceToText\(this\)/)
+  assert.match(activity, /history\.save\(text\)/)
   assert.match(activity, /copy\.setOnClickListener/)
   assert.match(activity, /history\.read\(item\)/)
-  assert.match(activity, /input\.setText\(text\)/)
   assert.match(activity, /OaclixClipboardBridge\.copy\(this, text\)/)
   assert.match(bridge, /ClipData\.newPlainText\(context\.getString\(R\.string\.clip_label\), text\)/)
   assert.match(bridge, /clipboard\.setPrimaryClip\(clip\)/)
+  assert.match(layout, /@\+id\/send_something_button/)
+  assert.match(strings, /name="home_add_clipboard">Guardar desde portapapeles</)
   assert.doesNotMatch(activity, /take\(8_000\)/)
   assert.doesNotMatch(bridge, /take\(|substring\(|ClipData\.newUri|writeText\(/)
   assert.doesNotMatch(layout, /android:maxLength="8000"/)
