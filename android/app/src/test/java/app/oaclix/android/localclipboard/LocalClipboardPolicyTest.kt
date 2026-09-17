@@ -19,6 +19,43 @@ class LocalClipboardPolicyTest {
     }
 
     @Test
+    fun `received text preserves transfer identity and sender`() {
+        val item = LocalClipboardPolicy.createReceived(
+            text = "recibido",
+            itemId = fixedId,
+            senderDeviceId = "dev_aaaaaaaaaaaaaaaa",
+            createdAt = 1_000L,
+            expiresAt = 1_000L + LocalClipboardPolicy.TEXT_RETENTION_MS,
+        )
+
+        assertEquals(fixedId, item.id)
+        assertEquals("dev_aaaaaaaaaaaaaaaa", item.receivedFromDeviceId)
+        assertEquals("recibido", item.text)
+    }
+
+    @Test
+    fun `received text rejects malformed sender or retention`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            LocalClipboardPolicy.createReceived(
+                text = "texto",
+                itemId = fixedId,
+                senderDeviceId = "invalid",
+                createdAt = 1_000L,
+                expiresAt = 2_000L,
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            LocalClipboardPolicy.createReceived(
+                text = "texto",
+                itemId = fixedId,
+                senderDeviceId = "dev_aaaaaaaaaaaaaaaa",
+                createdAt = 1_000L,
+                expiresAt = 1_000L + LocalClipboardPolicy.TEXT_RETENTION_MS + 1L,
+            )
+        }
+    }
+
+    @Test
     fun `blank and oversized text fail closed`() {
         assertThrows(IllegalArgumentException::class.java) {
             LocalClipboardPolicy.createDraft("   ", now = 1L, itemId = fixedId)
