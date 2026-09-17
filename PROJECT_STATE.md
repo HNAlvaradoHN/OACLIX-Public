@@ -121,6 +121,7 @@ Los identificadores y mecanismos internos de coordinación no deben convertirse 
 - El Android foreground debe tener **una sola sesión realtime por dispositivo**, para evitar que sockets concurrentes compitan por presencia/señales.
 - El WebSocket de esa sesión solo puede emitir frames `signal` válidos de SDP/ICE; no debe transportar texto ni ACK.
 - Los `.txt` locales largos compartidos hacia otras apps se exponen únicamente mediante un `ContentProvider` de solo lectura, con URI temporal y validación estricta del archivo local permitido.
+- Los archivos genéricos locales se copian a almacenamiento privado de la app y se comparten mediante un `ContentProvider` separado de solo lectura, con URI temporal; el proveedor valida autoridad, nombre interno, ruta canónica y vencimiento antes de exponer bytes.
 
 `SECURITY.md` sigue siendo aplicable cuando no contradiga esta dirección.
 
@@ -136,7 +137,7 @@ Quedan fuera del flujo Android activo del nuevo producto:
 
 El backend/PWA histórico todavía puede contener rutas legacy de relay. Eso **no las convierte en transporte aprobado para el nuevo Android** y no deben reutilizarse por inercia.
 
-Imágenes directas, archivos genéricos y P2P entre redes distintas se posponen hasta demostrar el flujo físico de texto LAN.
+Imágenes directas, envío directo de archivos genéricos y P2P entre redes distintas se posponen hasta demostrar el flujo físico de texto LAN. La selección/retención local de archivos genéricos sí forma parte de la experiencia Android local.
 
 ## 9. Checkpoints integrados
 
@@ -150,12 +151,14 @@ La Etapa A incluye:
 
 - pantalla principal nativa;
 - dispositivos vinculados visibles;
-- texto e imágenes locales;
-- copiar, compartir mediante share sheet nativo y eliminar;
-- botón `Agregar` para escribir texto, guardar portapapeles y elegir imagen;
+- texto, imágenes y archivos genéricos locales;
+- copiar texto/imágenes cuando existe un contrato de portapapeles útil, compartir mediante share sheet nativo y eliminar;
+- botón `Agregar` para escribir texto, guardar portapapeles, elegir imagen y elegir archivo;
 - vinculación accesible desde la interfaz principal sin duplicarla dentro de `Agregar`;
 - Photo Picker nativo en Android 13+ y selector de galería compatible en Android anteriores soportados;
-- textos locales mayores de 8.000 caracteres almacenados como `.txt` privado hasta 384 KB y compartidos a otras apps como archivo `.txt` real.
+- textos locales mayores de 8.000 caracteres almacenados como `.txt` privado hasta 384 KB y compartidos a otras apps como archivo `.txt` real;
+- archivos genéricos seleccionados mediante el selector de documentos, copiados por streaming a almacenamiento privado, retenidos seis horas y disponibles para compartir/eliminar localmente;
+- los archivos genéricos no tienen un límite artificial de MB impuesto por OACLIX en esta ruta local; el límite práctico es el almacenamiento/IO disponible del dispositivo.
 
 ### Etapa B — contratos, peer y conexión al flujo real
 
@@ -170,6 +173,8 @@ La Etapa A incluye:
 - CI #191 verificó PR #16 en `main` y publicó el primer artefacto APK de ese flujo.
 - PR #17 pulió la experiencia local observada durante la prueba: Photo Picker/galería, eliminación de la vinculación duplicada en `Agregar` y compartir texto largo como `.txt`; integrado mediante `22b959ee00912b33778cdc4b4f5f2b0d60e12c98`.
 - CI #192 verificó el head final de PR #17 y CI #193 verificó el `main` posterior al merge, incluido `testDebugUnitTest + assembleDebug` y publicación del APK.
+- PR #18 añadió la ruta local de archivos genéricos (`Elegir archivo` → copia privada → tarjeta local → Compartir/Eliminar) sin añadir transporte directo de archivos; integrado mediante `2875d21c178cba5ea60655e8e69a312b951df209`.
+- CI #195 verificó el head final de PR #18 en Web/Worker y Android. CI #196 verificó el `main` posterior al merge: su primer intento Android falló antes de probar código por un `Connection reset by peer` al descargar Gradle; el reintento del mismo commit pasó `testDebugUnitTest + assembleDebug` y publicó el APK sin cambio de código.
 
 No hay PR abiertos al cerrar este checkpoint.
 
@@ -194,12 +199,18 @@ La experiencia local Android integrada además incluye:
 - texto local de hasta 8.000 caracteres almacenado inline;
 - texto local mayor de 8.000 caracteres almacenado completo como `.txt` privado, con límite actual de 384 KB;
 - al compartir hacia otra app, el texto largo se entrega como archivo `.txt` de solo lectura con permiso URI temporal;
-- el envío directo dispositivo-a-dispositivo de texto **sigue limitado a 8.000 caracteres** y el `.txt` grande no forma parte todavía del protocolo directo.
+- `Elegir archivo` para archivos genéricos mediante `ACTION_OPEN_DOCUMENT`;
+- copia por streaming del archivo elegido a almacenamiento privado `oaclix-files`, con retención de seis horas y sin nube;
+- tarjeta local de archivo con extensión, nombre y tamaño; para archivos genéricos se ofrecen Compartir y Eliminar, pero no Copiar porque Android no define un contrato universal de “pegar archivo” comparable al texto/imagen;
+- compartir archivos genéricos a otras apps conserva el MIME detectado y usa URI temporal de solo lectura;
+- el envío directo dispositivo-a-dispositivo de texto **sigue limitado a 8.000 caracteres** y ni el `.txt` grande ni los archivos genéricos forman parte todavía del protocolo directo.
 
 Último checkpoint funcional integrado y verificado:
 
-- checkpoint funcional de `main`: `22b959ee00912b33778cdc4b4f5f2b0d60e12c98`.
-- CI post-merge: #193, Web/Worker ✅ y Android ✅, incluido APK debug publicado.
+- checkpoint funcional de `main`: `2875d21c178cba5ea60655e8e69a312b951df209`.
+- CI del head de PR: #195, Web/Worker ✅ y Android ✅.
+- CI post-merge: #196, Web/Worker ✅ y Android ✅ en el reintento, incluido APK debug publicado.
+- El primer intento Android de CI #196 no ejecutó las pruebas: falló por reinicio de conexión al descargar Gradle; no requirió modificación de código.
 - PR abiertos: 0.
 - Desarrollo activo paralelo: ninguno.
 - La prueba física de dos Android en la misma LAN **todavía no se ha completado**.
@@ -220,7 +231,7 @@ El primer MVP dispositivo-a-dispositivo queda demostrado cuando, entre dos Andro
 8. el texto aparece en recientes y puede pegarse/compartirse desde el receptor;
 9. no se observa payload de usuario transitando por el WebSocket/cloud.
 
-Ese gate físico es obligatorio antes de ampliar a imágenes, archivos o P2P entre redes distintas.
+Ese gate físico es obligatorio antes de ampliar el transporte directo a imágenes, archivos o P2P entre redes distintas.
 
 ## 12. Siguiente paso exacto
 
@@ -237,10 +248,10 @@ Orden de ejecución:
 5. elegir el otro dispositivo;
 6. comprobar recepción local, Android Clipboard y ACK de éxito;
 7. repetir al menos en sentido inverso;
-8. comprobar además en la APK actual el Photo Picker y que un texto local >8.000 caracteres se comparta hacia otra app como `.txt`;
+8. comprobar además en la APK actual el Photo Picker, compartir un texto local >8.000 caracteres como `.txt` y el flujo local `Elegir archivo` → tarjeta → Compartir/Eliminar;
 9. si falla, reproducir el problema, identificar la causa real y corregirla antes de ampliar alcance.
 
-No comenzar imágenes directas, archivos genéricos, envío desde tarjetas, P2P entre redes, panel, TURN ni relay de contenido hasta cerrar este gate físico.
+No comenzar imágenes directas, envío directo de archivos genéricos, envío desde tarjetas a otro dispositivo, P2P entre redes, panel, TURN ni relay de contenido hasta cerrar este gate físico.
 
 ## 13. Plan vivo
 
@@ -255,7 +266,10 @@ Leyenda: `✅` hecho y verificado por código/CI; `⏳` activo o pendiente de ve
 - ✅ Flujo `Agregar` sin vinculación duplicada.
 - ✅ Photo Picker/galería para elegir imágenes sin acceso general al almacenamiento.
 - ✅ Texto local largo guardado completo como `.txt` hasta 384 KB y compartido hacia otras apps como archivo `.txt`.
+- ✅ Archivos genéricos locales: elegir, copiar de forma privada por streaming, mostrar en recientes, compartir y eliminar; retención de seis horas.
 - ✅ PR #10 + cierre documental PR #11 integrados y verificados.
+- ✅ PR #17 integrado y verificado por CI #193 para el pulido local de imagen/.txt.
+- ✅ PR #18 integrado y verificado por CI #195/#196 para archivos genéricos locales.
 
 ### Etapa B — primer flujo real dispositivo a dispositivo
 
@@ -268,13 +282,12 @@ Leyenda: `✅` hecho y verificado por código/CI; `⏳` activo o pendiente de ve
 - ✅ Emisor completa éxito solo con ACK `stored`.
 - ✅ PR #15 integrado y `main` verificado por CI #188.
 - ✅ PR #16 publica APK debug de `main` con SHA-256 y retención corta.
-- ✅ PR #17 integrado y verificado por CI #193.
 - ⏳ Probar físicamente el flujo completo entre dos Android reales en la misma LAN.
 
 ### Etapa C — ampliar el mismo contrato
 
 - ⬜ Reutilizar el transporte directo para imágenes.
-- ⬜ Tratar archivos genéricos con un transporte común: PDF, Word, Excel, APK, ZIP, video y otros tipos compartibles.
+- ⬜ Añadir transporte directo común para archivos genéricos ya soportados localmente: PDF, Word, Excel, APK, ZIP, video y otros tipos compartibles.
 - ⬜ P2P directo entre redes distintas sin TURN/relay de pago en el MVP.
 - ⬜ Permitir enviar desde las tarjetas locales usando el mismo contrato ya probado.
 
