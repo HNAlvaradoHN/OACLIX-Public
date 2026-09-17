@@ -104,7 +104,7 @@ test('Android foreground lifecycle owns one metadata-only realtime session for d
   ])
 
   assert.match(controller, /Executors\.newSingleThreadExecutor\(\)/)
-  assert.match(controller, /client\.newWebSocket\(request, listenerFor\(session\)\)/)
+  assert.match(controller, /client\.newWebSocket\(request, listenerFor\(createdSession\)\)/)
   assert.match(controller, /NativeDirectSignalProtocol\.isOutboundSignalFrame\(frame\)/)
   assert.match(controller, /session\.peer\.handlePresence\(message\)/)
   assert.match(controller, /"signal" -> session\.peer\.handleSignal\(message\)/)
