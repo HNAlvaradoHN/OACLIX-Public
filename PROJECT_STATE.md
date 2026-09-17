@@ -163,9 +163,12 @@ Si una pieza añade complejidad sin acercar al usuario a:
 ## 10. Estado de desarrollo tras el cambio de dirección
 
 - La versión estable sigue siendo la que exista realmente en `main`; no declarar nuevas funciones como estables hasta integrarlas y verificarlas.
-- Las ramas `feat/transfer-control-plane` y `feat/transfer-engine` pertenecen al rumbo anterior y deben considerarse **superseded / no continuar como roadmap activo**.
-- El antiguo siguiente paso "Checkpoint 11: migrar imagen local a Transfer Engine" deja de ser el siguiente paso oficial.
-- No fusionar automáticamente PR históricos solo porque estén verdes; primero decidir qué partes siguen siendo útiles para el nuevo MVP.
+- PR #2, #3, #4, #5, #6 y #7 están **cerrados como SUPERSEDED** y no son trabajo pendiente activo.
+- Las ramas históricas `docs/direct-transfer-research`, `feat/android-direct-image-native`, `feat/android-pwa-shell`, `feat/android-pwa-visual-parity`, `feat/functional-convergence-1`, `feat/transfer-control-plane` y `feat/transfer-engine` no definen el roadmap actual.
+- `scratch-do-not-use` no contiene trabajo oficial y no debe usarse.
+- El antiguo siguiente paso "Checkpoint 11: migrar imagen local a Transfer Engine" queda cancelado como siguiente paso oficial.
+- No fusionar automáticamente ramas o PR históricos porque estén verdes; primero decidir qué piezas siguen siendo útiles para el nuevo MVP.
+- Documentación antigua que exista dentro de ramas históricas es solo historial y no puede reemplazar esta fuente de verdad.
 
 ## 11. Nuevo MVP
 
