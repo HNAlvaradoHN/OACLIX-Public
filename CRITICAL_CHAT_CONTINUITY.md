@@ -34,6 +34,21 @@ Primero cerrar correctamente el checkpoint actual:
 7. distinguir versión estable (`main`) de versión en desarrollo;
 8. no depender de memoria o del chat anterior para continuar.
 
+Además, **no basta con documentar el código**. Antes de rotar se debe capturar también el contexto conceptual que se definió durante todo el chat:
+
+- cuál es la idea/producto vigente y qué problema pretende resolver;
+- cómo debe sentirse y funcionar para el usuario;
+- decisiones funcionales, técnicas, de privacidad, seguridad y costos que quedaron aprobadas;
+- ideas anteriores que fueron sustituidas, descartadas o pospuestas;
+- alcance actual del MVP y qué queda explícitamente fuera por ahora;
+- qué partes ya están resueltas y verificadas;
+- qué partes siguen incompletas;
+- los pasos ordenados necesarios para completar la idea;
+- criterios claros para considerar cada paso terminado;
+- el siguiente paso exacto que debe ejecutar el nuevo chat.
+
+Si durante el chat cambió la dirección del producto, se documenta **la última dirección aceptada** y se marca claramente qué dirección anterior deja de ser vigente. Un chat nuevo no debe tener que reconstruir la idea leyendo conversaciones anteriores.
+
 Solo después se debe abrir un chat nuevo.
 
 ## Si aparecen señales de saturación
@@ -43,6 +58,7 @@ Si una respuesta tarda anormalmente, queda en “pensando” sin progreso verifi
 - no iniciar trabajo nuevo;
 - comprobar el estado real en GitHub;
 - cerrar/documentar el checkpoint si todavía es posible;
+- registrar también la idea vigente y el plan restante;
 - rotar de chat cuanto antes.
 
 El indicador válido de progreso no es que la interfaz diga “trabajando”, sino que exista evidencia verificable: cambios, commits, PR, CI o estado documentado.
@@ -52,3 +68,10 @@ El indicador válido de progreso no es que la interfaz diga “trabajando”, si
 **Un chat puede terminar; el proyecto no puede depender de él.**
 
 El repositorio debe permitir que el siguiente chat continúe sin reconstruir contexto desde conversaciones anteriores ni adivinar qué quedó pendiente.
+
+Eso incluye dos cosas inseparables:
+
+1. **estado técnico:** código, CI, ramas, PR, problemas y verificaciones;
+2. **estado de la idea:** producto acordado, decisiones, alcance, pasos restantes y siguiente acción.
+
+Si falta cualquiera de las dos, el cierre del chat está incompleto.
