@@ -205,11 +205,13 @@ No exponer todavía envío desde las tarjetas locales hasta que el mismo transpo
 Un chat nuevo debe:
 
 1. leer este archivo;
-2. verificar `main` y CI;
-3. revisar PR/ramas abiertas;
-4. tratar PR/ramas de la dirección anterior como históricas salvo decisión explícita de reutilización;
-5. revisar el código real relacionado con el MVP;
-6. continuar desde el siguiente paso vigente de este archivo o de una actualización posterior ya integrada en `main`.
+2. leer `CRITICAL_CHAT_CONTINUITY.md`;
+3. verificar `main` y CI;
+4. revisar PR/ramas abiertas;
+5. tratar PR/ramas de la dirección anterior como históricas salvo decisión explícita de reutilización;
+6. revisar el código real relacionado con el MVP;
+7. comprobar que el cierre del chat anterior documentó tanto el **estado técnico** como la **idea vigente**, sus decisiones y el plan restante;
+8. continuar desde el siguiente paso vigente de este archivo o de una actualización posterior ya integrada en `main`.
 
 **Está prohibido reconstruir el roadmap desde conversaciones antiguas, PR superseded o documentación de ramas históricas.**
 
@@ -254,3 +256,23 @@ Leyenda: `✅` hecho y verificado en su etapa; `⏳` en desarrollo o pendiente d
 - ⬜ Panel lateral u otras funciones avanzadas únicamente después de que el núcleo sea estable.
 
 Cada etapa significativa debe actualizar esta lista: lo terminado pasa a `✅`, lo activo a `⏳` y el siguiente paso exacto debe quedar escrito en la sección 12.
+
+## 15. Cierre conceptual obligatorio de cada chat
+
+Antes de rotar de conversación, el repositorio debe dejar documentado **qué idea se definió y cómo terminarla**, no únicamente qué archivos cambiaron.
+
+El cierre debe registrar como mínimo:
+
+- la idea de producto vigente en palabras claras;
+- la experiencia de usuario acordada;
+- decisiones aprobadas y sus razones cuando importen;
+- decisiones sustituidas, descartadas o pospuestas;
+- restricciones de privacidad, seguridad, arquitectura y costos;
+- alcance actual y elementos fuera del alcance inmediato;
+- qué partes de la idea ya están `✅` resueltas y verificadas;
+- qué parte está `⏳` activa;
+- qué pasos `⬜` faltan, en orden lógico;
+- qué prueba o criterio convierte cada paso en terminado;
+- el siguiente paso exacto para continuar.
+
+Si durante un chat aparece una nueva idea o se modifica una anterior, el plan vivo debe actualizarse antes de cerrar el chat. **El siguiente chat debe poder entender qué estamos construyendo, por qué, qué falta y en qué orden, sin leer la conversación anterior.**
