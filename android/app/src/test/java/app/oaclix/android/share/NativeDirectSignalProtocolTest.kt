@@ -11,6 +11,20 @@ import org.junit.Test
 
 class NativeDirectSignalProtocolTest {
     @Test
+    fun `ready requires authenticated device and session metadata only`() {
+        val valid = JSONObject()
+            .put("type", "ready")
+            .put("deviceId", "dev_aaaaaaaaaaaaaaaa")
+            .put("sessionId", "12345678-abcd")
+        val parsed = NativeDirectSignalProtocol.parseReady(valid)
+        assertNotNull(parsed)
+        assertEquals("12345678-abcd", parsed!!.sessionId)
+
+        val withPayload = JSONObject(valid.toString()).put("text", "secret")
+        assertNull(NativeDirectSignalProtocol.parseReady(withPayload))
+    }
+
+    @Test
     fun `presence requires unique valid device sessions`() {
         val valid = JSONObject()
             .put("type", "presence")
@@ -41,6 +55,7 @@ class NativeDirectSignalProtocolTest {
         assertEquals("signal", description.getString("type"))
         assertFalse(description.toString().contains("clipboard"))
         assertFalse(description.toString().contains("text"))
+        assertTrue(NativeDirectSignalProtocol.isOutboundSignalFrame(description))
 
         val candidate = NativeDirectSignalProtocol.candidateFrame(
             targetDeviceId = "dev_bbbbbbbbbbbbbbbb",
@@ -51,6 +66,27 @@ class NativeDirectSignalProtocolTest {
             candidate = "candidate:1 1 UDP 1 192.168.1.2 12345 typ host",
         )
         assertEquals("candidate", candidate.getJSONObject("signal").getString("kind"))
+        assertTrue(NativeDirectSignalProtocol.isOutboundSignalFrame(candidate))
+    }
+
+    @Test
+    fun `outbound signaling rejects payload or ack additions`() {
+        val valid = NativeDirectSignalProtocol.descriptionFrame(
+            targetDeviceId = "dev_bbbbbbbbbbbbbbbb",
+            negotiationId = "0123456789abcdef01234567",
+            negotiationGeneration = 1,
+            type = "offer",
+            sdp = "v=0\r\n",
+        )
+
+        assertFalse(NativeDirectSignalProtocol.isOutboundSignalFrame(
+            JSONObject(valid.toString()).put("payload", "private text"),
+        ))
+        assertFalse(NativeDirectSignalProtocol.isOutboundSignalFrame(
+            JSONObject(valid.toString()).apply {
+                getJSONObject("signal").put("ack", JSONObject().put("status", "stored"))
+            },
+        ))
     }
 
     @Test
