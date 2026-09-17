@@ -6,11 +6,10 @@ import org.junit.Test
 
 class NativeShareDestinationPresentationTest {
     @Test
-    fun `local General and linked devices are actionable once transport exists`() {
+    fun `local and linked devices are actionable once direct transport exists`() {
         val options = NativeShareDestinationPresentation.options(
             listOf(
                 NativeShareDestination.LocalClipboard,
-                NativeShareDestination.GeneralRoom,
                 NativeShareDestination.LinkedDevice(
                     deviceId = "dev_1234567890abcdef",
                     label = "Tablet",
@@ -20,8 +19,7 @@ class NativeShareDestinationPresentationTest {
 
         assertTrue(options[0].actionable)
         assertTrue(options[1].actionable)
-        assertTrue(options[2].actionable)
-        assertEquals("Tablet", options[2].label)
+        assertEquals("Tablet", options[1].label)
     }
 
     @Test
