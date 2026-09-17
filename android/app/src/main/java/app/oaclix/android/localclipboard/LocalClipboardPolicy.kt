@@ -27,6 +27,25 @@ object LocalClipboardPolicy {
         )
     }
 
+    fun createReceived(
+        text: String,
+        itemId: String,
+        senderDeviceId: String,
+        createdAt: Long,
+        expiresAt: Long,
+    ): LocalClipboardItem {
+        val item = LocalClipboardItem(
+            id = itemId,
+            text = text,
+            createdAt = createdAt,
+            expiresAt = expiresAt,
+            receivedFromDeviceId = senderDeviceId,
+        )
+        require(isValidStoredItem(item)) { "Texto recibido inválido" }
+        require(senderDeviceId != "") { "Dispositivo emisor inválido" }
+        return item
+    }
+
     fun isValidStoredItem(item: LocalClipboardItem): Boolean {
         if (!isValidItemId(item.id)) return false
         if (item.text.isBlank() || item.text.length > MAX_TEXT_LENGTH) return false
