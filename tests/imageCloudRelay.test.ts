@@ -103,7 +103,7 @@ test('Android foreground lifecycle owns one metadata-only realtime session for d
     read('android/app/src/main/java/app/oaclix/android/MainActivity.kt'),
   ])
 
-  assert.match(controller, /Executors\.newSingleThreadExecutor\(\)/)
+  assert.match(controller, /Executors\.newSingleThreadScheduledExecutor\(\)/)\n  assert.match(controller, /private fun scheduleReconnect\\(\\)/)
   assert.match(controller, /client\.newWebSocket\(request, listenerFor\(createdSession\)\)/)
   assert.match(controller, /NativeDirectSignalProtocol\.isOutboundSignalFrame\(frame\)/)
   assert.match(controller, /session\.peer\.handlePresence\(message\)/)
