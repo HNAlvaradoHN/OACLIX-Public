@@ -49,7 +49,7 @@ export type UnlinkedDevice = {
 // times per day so identity checks cannot consume the write quota by polling.
 const LAST_SEEN_WRITE_INTERVAL_MS = 6 * 60 * 60 * 1000
 
-function generalRoomId(personId: string) {
+export function generalRoomId(personId: string) {
   return `gen_${personId.replace(/^per_/, '')}`
 }
 
