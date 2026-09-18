@@ -94,6 +94,7 @@ class LinkDeviceActivity : Activity() {
             .setPositiveButton(R.string.share_connection_save) { _, _ ->
                 try {
                     NativeBackendConfig.save(this, input.text.toString())
+                    (application as? OaclixApplication)?.refreshDirectTextSession()
                     configureFlow(loadRoster = true)
                 } catch (error: IllegalArgumentException) {
                     status.text = error.message ?: getString(R.string.link_error)
@@ -113,6 +114,7 @@ class LinkDeviceActivity : Activity() {
             task = { flow.consumeAndLoad(code) },
             onSuccess = { roster ->
                 currentDeviceId = identity.getOrCreateSnapshot().deviceId
+                (application as? OaclixApplication)?.refreshDirectTextSession()
                 codeInput.text.clear()
                 generatedCode.visibility = View.GONE
                 renderDevices(roster)

@@ -263,6 +263,7 @@ class ShareReceiverActivity : Activity() {
             .setPositiveButton(R.string.share_connection_save) { _, _ ->
                 try {
                     NativeBackendConfig.save(this, urlInput.text.toString())
+                    (application as? OaclixApplication)?.refreshDirectTextSession()
                     updateConnectionButton()
                     renderDestinations(initialDestinations())
                     loadLinkedDestinations()
