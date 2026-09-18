@@ -51,6 +51,17 @@ test('Vinculados permite configurar backend sin usar un host inválido', async (
   assert.match(strings, /name="link_connection_required">Configura la conexión de OACLIX para vincular dispositivos\./)
 })
 
+test('WebRTC directo no negocia SDP con constraints nulos', async () => {
+  const peer = await readAndroid('app/src/main/java/app/oaclix/android/share/NativeDirectTextPeerManager.kt')
+  assert.match(peer, /import livekit\.org\.webrtc\.MediaConstraints/)
+  assert.match(peer, /createOffer\([\s\S]*?MediaConstraints\(\)\)/)
+  assert.match(peer, /createAnswer\([\s\S]*?MediaConstraints\(\)\)/)
+  assert.doesNotMatch(peer, /createOffer\([\s\S]{0,1200}?, null\)/)
+  assert.doesNotMatch(peer, /createAnswer\([\s\S]{0,1200}?, null\)/)
+  assert.match(peer, /runCatching \{[\s\S]*?createOffer/)
+  assert.match(peer, /runCatching \{[\s\S]*?createAnswer/)
+})
+
 test('el Gradle Wrapper Android queda fijado y verificable', async () => {
   const [properties, wrapperJar, gradlew] = await Promise.all([
     readAndroid('gradle/wrapper/gradle-wrapper.properties'),
