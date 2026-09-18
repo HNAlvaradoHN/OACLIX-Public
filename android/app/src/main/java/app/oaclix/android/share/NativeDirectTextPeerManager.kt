@@ -111,6 +111,21 @@ internal class NativeDirectTextPeerManager(
         return pending.result.get() ?: throw IOException("El dispositivo no confirmó el envío directo")
     }
 
+    fun resetSession() {
+        if (closed.get()) return
+        handler.post {
+            if (closed.get()) return@post
+            failAllPending(IOException("La sesión directa cambió"))
+            peers.values.toList().forEach(::disposePeer)
+            peers.clear()
+            remoteSessions.clear()
+            nextGenerations.clear()
+            acceptedRemoteNegotiations.clear()
+            retryScheduled.clear()
+            receivedReceipts.clear()
+        }
+    }
+
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
         handler.post {
@@ -118,6 +133,7 @@ internal class NativeDirectTextPeerManager(
             peers.values.toList().forEach(::disposePeer)
             peers.clear()
             remoteSessions.clear()
+            nextGenerations.clear()
             acceptedRemoteNegotiations.clear()
             retryScheduled.clear()
             receivedReceipts.clear()
