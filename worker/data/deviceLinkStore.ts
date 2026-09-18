@@ -1,10 +1,14 @@
-import { generalRoomId, type D1DatabaseLike, type DevicePrincipal } from './coreStore'
+import type { D1DatabaseLike, DevicePrincipal } from './coreStore'
 
 const LINK_TTL_MS = 10 * 60 * 1000
 const MIN_REGENERATE_INTERVAL_MS = 30 * 1000
 const LINK_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 const LINK_CODE_LENGTH = 10
 const encoder = new TextEncoder()
+
+function generalRoomId(personId: string) {
+  return `gen_${personId.replace(/^per_/, '')}`
+}
 
 type LinkGroupState = {
   deviceCount: number
