@@ -65,7 +65,7 @@ test('configurar o vincular reinicia la sesión realtime activa', async () => {
   assert.match(shareReceiver, /NativeBackendConfig\.save\(this, urlInput\.text\.toString\(\)\)[\s\S]*?refreshDirectTextSession\(\)/)
 })
 
-test('realtime directo refresca identidad sin recrear el motor WebRTC', async () => {
+test('realtime directo cambia de sesión sin destruir PeerConnection activos', async () => {
   const [controller, peer, application, mainActivity, linkActivity] = await Promise.all([
     readAndroid('app/src/main/java/app/oaclix/android/share/NativeDirectTextSessionController.kt'),
     readAndroid('app/src/main/java/app/oaclix/android/share/NativeDirectTextPeerManager.kt'),
@@ -75,17 +75,23 @@ test('realtime directo refresca identidad sin recrear el motor WebRTC', async ()
   ])
   assert.match(controller, /ScheduledExecutorService/)
   assert.match(controller, /private var peerManager: NativeDirectTextPeerManager\? = null/)
-  assert.match(controller, /fun refresh\(\)[\s\S]*?closeSocket\("Sesión realtime actualizada"\)[\s\S]*?peerManager\?\.resetSession\(\)[\s\S]*?connect\(attempt\)/)
-  assert.doesNotMatch(controller, /fun refresh\(\)[\s\S]{0,500}?stop\(\)[\s\S]{0,200}?start\(\)/)
+  assert.match(controller, /fun refresh\(\)[\s\S]*?closeSocket\("Sesión realtime actualizada"\)[\s\S]*?connect\(attempt\)/)
+  assert.doesNotMatch(controller, /fun refresh\(\)[\s\S]{0,700}?resetSession\(\)/)
+  assert.doesNotMatch(controller, /fun stop\(\)[\s\S]{0,700}?resetSession\(\)/)
+  assert.doesNotMatch(controller, /private fun failSession[\s\S]{0,900}?resetSession\(\)/)
+  assert.doesNotMatch(controller, /private fun failStartup[\s\S]{0,700}?resetSession\(\)/)
+  assert.doesNotMatch(peer, /fun resetSession\(\)/)
   assert.match(controller, /sendRealtimeFrame = ::sendSignalFrame/)
-  assert.match(controller, /fun closeSocket\(reason: String\)[\s\S]*?socket\.getAndSet\(null\)\?\.close/)
-  assert.doesNotMatch(controller, /fun closeSocket\(reason: String\)[\s\S]{0,200}?peer\.close\(\)/)
-  assert.match(peer, /fun resetSession\(\)[\s\S]*?peers\.values\.toList\(\)\.forEach\(::disposePeer\)[\s\S]*?remoteSessions\.clear\(\)/)
-  assert.doesNotMatch(peer, /fun resetSession\(\)[\s\S]{0,600}?factory\.dispose\(\)/)
-  assert.match(application, /directTextController\.refresh\(\)/)
-  assert.match(mainActivity, /result\.onSuccess \{ roster ->[\s\S]*?refreshDirectTextSession\(\)[\s\S]*?renderLinkedDevices\(roster\)/)
+  assert.match(controller, /peerManager\?\.close\(\)/)
+  assert.match(application, /!::receiverGate\.isInitialized \|\| !receiverGate\.isActive\(\)/)
+  assert.match(application, /NativeDirectTextProtocol\.AckStatus\.Rejected/)
   assert.match(linkActivity, /task = \{ flow\.consumeAndLoad\(code\) \}[\s\S]*?refreshDirectTextSession\(\)/)
-  assert.match(linkActivity, /private fun loadRoster\(announce: Boolean\)[\s\S]*?refreshDirectTextSession\(\)[\s\S]*?renderDevices\(roster\)/)
+
+  const mainRoster = mainActivity.match(/private fun loadLinkedDevices\(\)[\s\S]*?private fun renderLinkedDevices/)?.[0] ?? ''
+  assert.doesNotMatch(mainRoster, /refreshDirectTextSession\(\)/)
+
+  const linkedRoster = linkActivity.match(/private fun loadRoster\(announce: Boolean\)[\s\S]*?private fun renameDevice/)?.[0] ?? ''
+  assert.doesNotMatch(linkedRoster, /refreshDirectTextSession\(\)/)
 })
 
 test('WebRTC directo no negocia SDP con constraints nulos', async () => {
