@@ -181,8 +181,14 @@ La Etapa A incluye:
 - PR #19 intentó restaurar un endpoint de despliegue dentro del snapshot público, pero la auditoría lo rechazó correctamente; se cerró **sin integrar** y no se debilitó la protección de publicación.
 - PR #20 corrigió la causa sin incrustar endpoints de despliegue en el repositorio público: el backend sin configurar queda vacío, los hosts `.invalid` se rechazan y **Vinculados** ofrece `Configurar conexión` para guardar localmente una URL HTTPS válida; integrado mediante `c5db993ef7491b2a4a8f1c452102c6cb067c795b`.
 - CI #199 verificó el head final de PR #20 con auditoría pública, Web/Worker y Android verdes. CI #200 verificó el `main` posterior al merge, incluido `testDebugUnitTest + assembleDebug` y publicación del APK.
+- PR #21–#25 endurecieron la negociación y el lifecycle realtime/WebRTC durante la prueba física. Varias iteraciones corrigieron fallos parciales, pero no se consideraron físicamente cerradas hasta aislar el defecto nativo real.
+- PR #26 eliminó `resetSession()` de refresh/stop/fail: ya no se hace `dispose()` de `PeerConnection` activos mientras WebRTC puede seguir entregando callbacks nativos. Integrado mediante `8c4afb8b01649f9b31025c2b6ce87f1fb7c3f379`; CI #216/#217 verdes. Con APK #217, el Ing. confirmó físicamente que ambos Android vinculados permanecen abiertos sin crash.
+- La siguiente prueba física reveló un fallo separado: D1 mostraba ambos dispositivos vinculados, pero el destino podía seguir apareciendo offline en realtime.
+- PR #27 corrigió esa causa en servidor: al completar una vinculación, conserva los room/device previos de ambos equipos y cierra autoritativamente sus sesiones realtime antiguas para que Android vuelva a bootstrapear el room final. También añadió `backendBuild: link-realtime-reset-v1` en `/api/health`. Integrado mediante `59dcc6763e531c6e615ead6d9e8963cbff868236`; CI #219 y #220 verdes.
+- Como la integración Cloudflare del Worker `oaclix` pertenece al repositorio operativo histórico, PR #151 de `HNAlvaradoHN/OACLIX` espejó exactamente esos archivos ya verificados; quedó integrado en `26b7b2f699538ecf671e988f514b659ffe75672b`.
+- El endpoint real `oaclix.geovaalvarado0.workers.dev/api/health` fue verificado después del despliegue y devuelve `backendBuild: link-realtime-reset-v1`. Por tanto, el backend de despliegue usado por Android contiene la corrección de presencia post-vinculación.
 
-No hay PR abiertos al cerrar este checkpoint.
+No hay PR abiertos en `OACLIX-Public` al cerrar este checkpoint.
 
 ## 10. Estado integrado actual
 
@@ -217,15 +223,16 @@ La experiencia local Android integrada además incluye:
 
 Último checkpoint funcional integrado y verificado:
 
-- checkpoint funcional de `main`: `c5db993ef7491b2a4a8f1c452102c6cb067c795b`.
-- CI del head de PR: #199, auditoría pública ✅, Web/Worker ✅ y Android ✅.
-- CI post-merge: #200, Web/Worker ✅ y Android ✅, incluido APK debug publicado.
-- PR #19 quedó cerrado sin integrar porque violaba deliberadamente la auditoría pública al incrustar un endpoint de despliegue.
-- PR abiertos: 0.
-- Desarrollo activo paralelo: ninguno.
-- La prueba física de dos Android en la misma LAN **todavía no se ha completado**.
+- `OACLIX-Public/main`: `59dcc6763e531c6e615ead6d9e8963cbff868236`.
+- cliente Android físicamente bajo prueba: APK CI #217, derivada de `8c4afb8b01649f9b31025c2b6ce87f1fb7c3f379`; ambos dispositivos vinculados permanecen abiertos sin crash.
+- CI PR backend #219: Web/Worker ✅ y Android ✅.
+- CI post-merge #220: Web/Worker ✅ y Android ✅.
+- backend operativo desplegado mediante espejo histórico `26b7b2f699538ecf671e988f514b659ffe75672b`.
+- despliegue real verificado por `/api/health`: `backendBuild: link-realtime-reset-v1`.
+- PR abiertos en `OACLIX-Public`: 0.
+- la prueba física completa de texto LAN **todavía no está cerrada**: falta verificar, con el backend ya actualizado, presencia mutua → DataChannel → guardado local → Clipboard → ACK `stored` → éxito en ambos sentidos.
 
-Por tanto, el código está integrado y compilado, pero el primer MVP dispositivo-a-dispositivo todavía no debe declararse físicamente probado.
+Por tanto, el crash de vinculación está físicamente corregido y la causa servidor de presencia stale está integrada/desplegada, pero el primer MVP dispositivo-a-dispositivo todavía no debe declararse físicamente probado hasta repetir el envío real.
 
 ## 11. Nuevo MVP — criterio de terminado
 
@@ -251,16 +258,16 @@ El siguiente checkpoint de producto es **prueba física de texto entre dos Andro
 
 Orden de ejecución:
 
-1. instalar una APK construida desde el checkpoint funcional integrado actual en ambos Android de prueba;
-2. si la APK pública no trae backend inyectado, abrir **Vinculados → Configurar conexión** y guardar en cada dispositivo la URL HTTPS del backend de despliegue autorizado;
-3. generar/consumir un código si los dispositivos necesitan volver a vincularse y confirmar que ambos aparecen como destinos;
+1. mantener APK CI #217 en ambos Android; PR #27 fue backend-only y no requiere reinstalar APK;
+2. confirmar que ambos conservan la URL HTTPS de conexión ya configurada;
+3. como el par actual fue vinculado antes del backend `link-realtime-reset-v1`, forzar detención de OACLIX en ambos y reabrirlos para que ambas sesiones entren al room autoritativo actual; si la presencia sigue stale, desvincular/vincular una sola vez con el backend nuevo;
 4. mantener ambos Android en la misma LAN y con OACLIX en foreground para este gate;
-5. desde una app externa, compartir un texto hacia OACLIX en el emisor;
-6. elegir el otro dispositivo;
-7. comprobar recepción local, Android Clipboard y ACK de éxito;
-8. repetir al menos en sentido inverso;
-9. comprobar además en la APK actual el Photo Picker, compartir un texto local >8.000 caracteres como `.txt` y el flujo local `Elegir archivo` → tarjeta → Compartir/Eliminar;
-10. si falla, reproducir el problema, identificar la causa real y corregirla antes de ampliar alcance.
+5. desde una app externa, compartir un texto hacia OACLIX en el emisor y elegir el otro dispositivo;
+6. comprobar que el destino ya aparece online, que el texto llega por DataChannel, se guarda localmente y queda en Android Clipboard;
+7. comprobar que el receptor responde `stored` solo después de guardar/copiar y que el emisor muestra éxito solo tras ese ACK;
+8. repetir en sentido inverso;
+9. si vuelve a decir `El dispositivo de destino no está conectado`, revisar primero IDs activos/roster stale por reinstalaciones anteriores y room/person autoritativos; no depurar ICE hasta confirmar que presencia contiene al target;
+10. no ampliar a imágenes, archivos directos, P2P entre redes ni retención seleccionable hasta cerrar este gate físico.
 
 No comenzar imágenes directas, envío directo de archivos genéricos, envío desde tarjetas a otro dispositivo, P2P entre redes, panel, TURN ni relay de contenido hasta cerrar este gate físico.
 
@@ -295,7 +302,9 @@ Leyenda: `✅` hecho y verificado por código/CI; `⏳` activo o pendiente de ve
 - ✅ PR #15 integrado y `main` verificado por CI #188.
 - ✅ PR #16 publica APK debug de `main` con SHA-256 y retención corta.
 - ✅ PR #20 corrige el setup de backend en instalaciones públicas: sin host ficticio y con configuración explícita desde Vinculados; CI #199/#200 verdes.
-- ⏳ Probar físicamente el flujo completo entre dos Android reales en la misma LAN.
+- ✅ PR #26 elimina disposal de PeerConnection durante refresh/stop/fail; APK #217 fue verificada físicamente sin crash al mantener ambos Android vinculados abiertos.
+- ✅ PR #27 corrige sesiones realtime stale después de vincular; CI #219/#220 verdes y backend real verificado con `backendBuild: link-realtime-reset-v1`.
+- ⏳ Probar físicamente el flujo completo entre dos Android reales en la misma LAN con el backend actualizado.
 
 ### Etapa C — ampliar el mismo contrato
 
