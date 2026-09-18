@@ -140,6 +140,7 @@ class LinkDeviceActivity : Activity() {
             busyMessage = getString(R.string.link_loading_devices),
             task = { flow.load() },
             onSuccess = { roster ->
+                (application as? OaclixApplication)?.refreshDirectTextSession()
                 renderDevices(roster)
                 status.text = if (announce) {
                     getString(R.string.link_devices_loaded, roster.devices.size)
