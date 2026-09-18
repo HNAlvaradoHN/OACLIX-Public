@@ -6,6 +6,7 @@ import android.os.HandlerThread
 import livekit.org.webrtc.CandidatePairChangeEvent
 import livekit.org.webrtc.DataChannel
 import livekit.org.webrtc.IceCandidate
+import livekit.org.webrtc.MediaConstraints
 import livekit.org.webrtc.MediaStream
 import livekit.org.webrtc.PeerConnection
 import livekit.org.webrtc.PeerConnectionFactory
@@ -254,21 +255,25 @@ internal class NativeDirectTextPeerManager(
             return
         }
 
-        peer.connection.createOffer(object : BaseSdpObserver() {
-            override fun onCreateSuccess(description: SessionDescription?) {
-                if (description == null) {
-                    handler.post { failPeer(peer) }
-                    return
+        runCatching {
+            peer.connection.createOffer(object : BaseSdpObserver() {
+                override fun onCreateSuccess(description: SessionDescription?) {
+                    if (description == null) {
+                        handler.post { failPeer(peer) }
+                        return
+                    }
+                    handler.post {
+                        if (isCurrent(peer)) setLocalAndSignal(peer, description)
+                    }
                 }
-                handler.post {
-                    if (isCurrent(peer)) setLocalAndSignal(peer, description)
-                }
-            }
 
-            override fun onCreateFailure(error: String?) {
-                handler.post { failPeer(peer) }
-            }
-        }, null)
+                override fun onCreateFailure(error: String?) {
+                    handler.post { failPeer(peer) }
+                }
+            }, MediaConstraints())
+        }.onFailure {
+            failPeer(peer)
+        }
     }
 
     private fun applyRemoteDescription(
@@ -295,21 +300,25 @@ internal class NativeDirectTextPeerManager(
 
     private fun createAnswer(peer: PeerState) {
         if (!isCurrent(peer)) return
-        peer.connection.createAnswer(object : BaseSdpObserver() {
-            override fun onCreateSuccess(description: SessionDescription?) {
-                if (description == null) {
-                    handler.post { failPeer(peer) }
-                    return
+        runCatching {
+            peer.connection.createAnswer(object : BaseSdpObserver() {
+                override fun onCreateSuccess(description: SessionDescription?) {
+                    if (description == null) {
+                        handler.post { failPeer(peer) }
+                        return
+                    }
+                    handler.post {
+                        if (isCurrent(peer)) setLocalAndSignal(peer, description)
+                    }
                 }
-                handler.post {
-                    if (isCurrent(peer)) setLocalAndSignal(peer, description)
-                }
-            }
 
-            override fun onCreateFailure(error: String?) {
-                handler.post { failPeer(peer) }
-            }
-        }, null)
+                override fun onCreateFailure(error: String?) {
+                    handler.post { failPeer(peer) }
+                }
+            }, MediaConstraints())
+        }.onFailure {
+            failPeer(peer)
+        }
     }
 
     private fun setLocalAndSignal(peer: PeerState, description: SessionDescription) {
