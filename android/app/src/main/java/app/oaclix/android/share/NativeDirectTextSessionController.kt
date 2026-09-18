@@ -14,8 +14,9 @@ import org.json.JSONObject
 import java.io.IOException
 import java.net.URL
 import java.util.Base64
-import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -32,7 +33,7 @@ internal class NativeDirectTextSessionController(
     private val baseUrlProvider: () -> String = { NativeBackendConfig.resolve(context.applicationContext) },
 ) : AutoCloseable {
     private val appContext = context.applicationContext
-    private val executor: ExecutorService = Executors.newSingleThreadExecutor()
+    private val executor: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor()
     private val stateLock = Object()
 
     @Volatile private var closed = false
@@ -41,6 +42,7 @@ internal class NativeDirectTextSessionController(
     private var generation = 0L
     private var active: ActiveSession? = null
     private var startupFailure: IOException? = null
+    private var reconnectScheduled = false
 
     fun start() {
         val attempt = synchronized(stateLock) {
@@ -55,12 +57,22 @@ internal class NativeDirectTextSessionController(
         executor.execute { connect(attempt) }
     }
 
+    fun refresh() {
+        val shouldRestart = synchronized(stateLock) {
+            !closed && requested && !executor.isShutdown
+        }
+        if (!shouldRestart) return
+        stop()
+        start()
+    }
+
     fun stop() {
         val stale = synchronized(stateLock) {
             if (closed && active == null && !connecting) return
             requested = false
             generation += 1L
             connecting = false
+            reconnectScheduled = false
             startupFailure = IOException("OACLIX está en pausa")
             val current = active
             active = null
@@ -81,7 +93,14 @@ internal class NativeDirectTextSessionController(
 
         start()
         val deadlineNanos = System.nanoTime() + timeoutMs * NANOS_PER_MILLISECOND
-        val session = awaitReadyPresence(targetDeviceId, deadlineNanos)
+        var session = awaitReadyPresence(deadlineNanos)
+        if (targetDeviceId !in session.onlineDeviceIds) {
+            refresh()
+            session = awaitReadyPresence(deadlineNanos)
+            if (targetDeviceId !in session.onlineDeviceIds) {
+                throw IOException("El dispositivo de destino no está conectado")
+            }
+        }
         val remainingMs = remainingMillis(deadlineNanos)
         if (remainingMs < MIN_SEND_TIMEOUT_MS) {
             throw IOException("No hubo tiempo suficiente para abrir el canal directo")
@@ -96,6 +115,7 @@ internal class NativeDirectTextSessionController(
             requested = false
             generation += 1L
             connecting = false
+            reconnectScheduled = false
             startupFailure = IOException("El canal directo se cerró")
             val current = active
             active = null
@@ -238,7 +258,7 @@ internal class NativeDirectTextSessionController(
         return socket.send(frame.toString())
     }
 
-    private fun awaitReadyPresence(targetDeviceId: String, deadlineNanos: Long): ActiveSession {
+    private fun awaitReadyPresence(deadlineNanos: Long): ActiveSession {
         synchronized(stateLock) {
             while (true) {
                 if (closed) throw IOException("El canal directo está cerrado")
@@ -247,9 +267,6 @@ internal class NativeDirectTextSessionController(
                 }
                 val current = active
                 if (current != null && current.readySessionId != null && current.presenceKnown) {
-                    if (targetDeviceId !in current.onlineDeviceIds) {
-                        throw IOException("El dispositivo de destino no está conectado")
-                    }
                     return current
                 }
 
@@ -276,15 +293,32 @@ internal class NativeDirectTextSessionController(
     }
 
     private fun failSession(session: ActiveSession, error: IOException) {
-        val shouldClose = synchronized(stateLock) {
+        val shouldReconnect = synchronized(stateLock) {
             if (active !== session) return
             active = null
             connecting = false
             startupFailure = error
             stateLock.notifyAll()
+            requested && !closed
+        }
+        session.close("Sesión terminada")
+        if (shouldReconnect) scheduleReconnect()
+    }
+
+    private fun scheduleReconnect() {
+        val shouldSchedule = synchronized(stateLock) {
+            if (closed || !requested || reconnectScheduled || executor.isShutdown) return
+            reconnectScheduled = true
             true
         }
-        if (shouldClose) session.close("Sesión terminada")
+        if (!shouldSchedule) return
+        executor.schedule({
+            val shouldStart = synchronized(stateLock) {
+                reconnectScheduled = false
+                !closed && requested && active == null && !connecting
+            }
+            if (shouldStart) start()
+        }, RECONNECT_DELAY_MS, TimeUnit.MILLISECONDS)
     }
 
     private fun isAttemptCurrent(attempt: Long): Boolean =
@@ -320,6 +354,7 @@ internal class NativeDirectTextSessionController(
         private const val MIN_SEND_TIMEOUT_MS = 1_000L
         private const val MAX_SEND_TIMEOUT_MS = 30_000L
         private const val NANOS_PER_MILLISECOND = 1_000_000L
+        private const val RECONNECT_DELAY_MS = 750L
 
         private fun base64Url(value: String): String = Base64.getUrlEncoder()
             .withoutPadding()
