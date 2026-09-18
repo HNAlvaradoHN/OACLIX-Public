@@ -65,7 +65,7 @@ test('configurar o vincular reinicia la sesión realtime activa', async () => {
   assert.match(shareReceiver, /NativeBackendConfig\.save\(this, urlInput\.text\.toString\(\)\)[\s\S]*?refreshDirectTextSession\(\)/)
 })
 
-test('realtime directo se recupera de presencia obsoleta o socket caído', async () => {
+test('realtime directo se recupera sin reiniciar WebRTC al cargar roster', async () => {
   const [controller, application, mainActivity, linkActivity] = await Promise.all([
     readAndroid('app/src/main/java/app/oaclix/android/share/NativeDirectTextSessionController.kt'),
     readAndroid('app/src/main/java/app/oaclix/android/OaclixApplication.kt'),
@@ -78,8 +78,14 @@ test('realtime directo se recupera de presencia obsoleta o socket caído', async
   assert.match(controller, /if \(shouldReconnect\) scheduleReconnect\(\)/)
   assert.match(controller, /if \(targetDeviceId !in session\.onlineDeviceIds\) \{[\s\S]*?refresh\(\)[\s\S]*?awaitReadyPresence/)
   assert.match(application, /directTextController\.refresh\(\)/)
-  assert.match(mainActivity, /result\.onSuccess \{ roster ->[\s\S]*?refreshDirectTextSession\(\)[\s\S]*?renderLinkedDevices\(roster\)/)
-  assert.match(linkActivity, /onSuccess = \{ roster ->[\s\S]*?refreshDirectTextSession\(\)[\s\S]*?renderDevices\(roster\)/)
+
+  const mainRoster = mainActivity.match(/private fun loadLinkedDevices\(\)[\s\S]*?private fun renderLinkedDevices/)?.[0] ?? ''
+  assert.doesNotMatch(mainRoster, /refreshDirectTextSession\(\)/)
+
+  const linkedRoster = linkActivity.match(/private fun loadRoster\(announce: Boolean\)[\s\S]*?private fun renameDevice/)?.[0] ?? ''
+  assert.doesNotMatch(linkedRoster, /refreshDirectTextSession\(\)/)
+
+  assert.match(linkActivity, /task = \{ flow\.consumeAndLoad\(code\) \}[\s\S]*?refreshDirectTextSession\(\)/)
 })
 
 test('WebRTC directo no negocia SDP con constraints nulos', async () => {
