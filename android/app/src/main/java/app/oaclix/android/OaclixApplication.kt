@@ -19,7 +19,9 @@ class OaclixApplication : Application(), Application.ActivityLifecycleCallbacks 
         directTextController = NativeDirectTextSessionController(
             context = this,
             onIncomingTransfer = { transfer ->
-                if (NativeDirectTextProtocol.isExpired(transfer)) {
+                if (!::receiverGate.isInitialized || !receiverGate.isActive()) {
+                    NativeDirectTextProtocol.AckStatus.Rejected
+                } else if (NativeDirectTextProtocol.isExpired(transfer)) {
                     NativeDirectTextProtocol.AckStatus.Expired
                 } else {
                     runCatching {
