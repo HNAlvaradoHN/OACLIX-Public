@@ -31,6 +31,7 @@ const DEVICE_ID_PATTERN = /^dev_[A-Za-z0-9_-]{16,64}$/
 const HEARTBEAT_REQUEST = JSON.stringify({ type: 'ping' })
 const HEARTBEAT_RESPONSE = JSON.stringify({ type: 'pong' })
 const UNLINK_CONTROL = 'device-unlink-v1'
+const LINK_REFRESH_CONTROL = 'device-link-refresh-v1'
 
 function send(socket: WebSocket, value: unknown) {
   if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(value))
@@ -56,8 +57,10 @@ function latestSocketsByDevice(sockets: WebSocket[]) {
 
 export class RealtimeHub extends DurableObject {
   async fetch(request: Request): Promise<Response> {
-    if (request.method === 'POST' && request.headers.get('X-OACLIX-Internal-Control') === UNLINK_CONTROL) {
-      return this.unlinkDevice(request)
+    if (request.method === 'POST') {
+      const control = request.headers.get('X-OACLIX-Internal-Control')
+      if (control === UNLINK_CONTROL) return this.unlinkDevice(request)
+      if (control === LINK_REFRESH_CONTROL) return this.refreshLinkedDevice(request)
     }
 
     if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') {
@@ -189,6 +192,14 @@ export class RealtimeHub extends DurableObject {
   }
 
   private unlinkDevice(request: Request) {
+    return this.closeDeviceSessions(request, 4003, 'Dispositivo desvinculado', 'unlinked')
+  }
+
+  private refreshLinkedDevice(request: Request) {
+    return this.closeDeviceSessions(request, 4004, 'Vinculación actualizada', 'refreshed')
+  }
+
+  private closeDeviceSessions(request: Request, code: number, reason: string, resultKey: 'unlinked' | 'refreshed') {
     const deviceId = request.headers.get('X-OACLIX-Device-Id') ?? ''
     if (!DEVICE_ID_PATTERN.test(deviceId)) return new Response('Dispositivo inválido', { status: 400 })
 
@@ -196,12 +207,12 @@ export class RealtimeHub extends DurableObject {
     for (const socket of this.ctx.getWebSockets()) {
       const current = attachment(socket)
       if (!current || current.deviceId !== deviceId) continue
-      if (socket.readyState < WebSocket.CLOSING) socket.close(4003, 'Dispositivo desvinculado')
+      if (socket.readyState < WebSocket.CLOSING) socket.close(code, reason)
       closed += 1
     }
 
     this.broadcastPresence()
-    return Response.json({ unlinked: true, closed })
+    return Response.json({ [resultKey]: true, closed })
   }
 
   private broadcastPresence() {

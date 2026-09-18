@@ -57,3 +57,20 @@ test('registros antiguos bloqueados se migran a identidad independiente al abrir
   assert.match(worker, /requiresStandaloneMigration/)
   assert.match(worker, /Reabre OACLIX para actualizar la identidad de este dispositivo/)
 })
+
+
+test('vincular fuerza reconexión realtime y health identifica el backend', async () => {
+  const [worker, realtime, linkStore] = await Promise.all([
+    read('worker/index.ts'),
+    read('worker/realtime/realtimeHub.ts'),
+    read('worker/data/deviceLinkStore.ts'),
+  ])
+
+  assert.match(worker, /device-link-refresh-v1/)
+  assert.match(worker, /refreshLinkedDeviceRealtime\(env, result\.realtimeResetTargets\)/)
+  assert.match(worker, /backendBuild: BACKEND_BUILD/)
+  assert.match(worker, /link-realtime-reset-v1/)
+  assert.match(realtime, /device-link-refresh-v1/)
+  assert.match(realtime, /Vinculación actualizada/)
+  assert.match(linkStore, /realtimeResetTargets = linkRealtimeResetTargets/)
+})
