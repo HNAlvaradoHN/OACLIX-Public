@@ -51,6 +51,20 @@ test('Vinculados permite configurar backend sin usar un host inválido', async (
   assert.match(strings, /name="link_connection_required">Configura la conexión de OACLIX para vincular dispositivos\./)
 })
 
+test('configurar o vincular reinicia la sesión realtime activa', async () => {
+  const [application, linkActivity, shareReceiver] = await Promise.all([
+    readAndroid('app/src/main/java/app/oaclix/android/OaclixApplication.kt'),
+    readAndroid('app/src/main/java/app/oaclix/android/LinkDeviceActivity.kt'),
+    readAndroid('app/src/main/java/app/oaclix/android/ShareReceiverActivity.kt'),
+  ])
+  assert.match(application, /internal fun refreshDirectTextSession\(\)/)
+  assert.match(application, /receiverGate\.isActive\(\)/)
+  assert.match(application, /directTextController\.stop\(\)[\s\S]*?directTextController\.start\(\)/)
+  assert.match(linkActivity, /NativeBackendConfig\.save\(this, input\.text\.toString\(\)\)[\s\S]*?refreshDirectTextSession\(\)/)
+  assert.match(linkActivity, /onSuccess = \{ roster ->[\s\S]*?refreshDirectTextSession\(\)[\s\S]*?renderDevices\(roster\)/)
+  assert.match(shareReceiver, /NativeBackendConfig\.save\(this, urlInput\.text\.toString\(\)\)[\s\S]*?refreshDirectTextSession\(\)/)
+})
+
 test('WebRTC directo no negocia SDP con constraints nulos', async () => {
   const peer = await readAndroid('app/src/main/java/app/oaclix/android/share/NativeDirectTextPeerManager.kt')
   assert.match(peer, /import livekit\.org\.webrtc\.MediaConstraints/)
