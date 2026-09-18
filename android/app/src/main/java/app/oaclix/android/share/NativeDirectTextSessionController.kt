@@ -41,6 +41,8 @@ internal class NativeDirectTextSessionController(
     private var connecting = false
     private var generation = 0L
     private var active: ActiveSession? = null
+    private var peerManager: NativeDirectTextPeerManager? = null
+    private var peerDeviceId: String? = null
     private var startupFailure: IOException? = null
     private var reconnectScheduled = false
 
@@ -58,12 +60,20 @@ internal class NativeDirectTextSessionController(
     }
 
     fun refresh() {
-        val shouldRestart = synchronized(stateLock) {
-            !closed && requested && !executor.isShutdown
+        val (attempt, stale) = synchronized(stateLock) {
+            if (closed || !requested || executor.isShutdown) return
+            generation += 1L
+            connecting = true
+            reconnectScheduled = false
+            startupFailure = null
+            val current = active
+            active = null
+            stateLock.notifyAll()
+            generation to current
         }
-        if (!shouldRestart) return
-        stop()
-        start()
+        stale?.closeSocket("Sesión realtime actualizada")
+        peerManager?.resetSession()
+        executor.execute { connect(attempt) }
     }
 
     fun stop() {
@@ -79,7 +89,8 @@ internal class NativeDirectTextSessionController(
             stateLock.notifyAll()
             current
         }
-        stale?.close("OACLIX en pausa")
+        stale?.closeSocket("OACLIX en pausa")
+        peerManager?.resetSession()
     }
 
     fun send(
@@ -122,7 +133,10 @@ internal class NativeDirectTextSessionController(
             stateLock.notifyAll()
             current
         }
-        stale?.close("OACLIX cerrado")
+        stale?.closeSocket("OACLIX cerrado")
+        peerManager?.close()
+        peerManager = null
+        peerDeviceId = null
         executor.shutdown()
     }
 
@@ -139,12 +153,25 @@ internal class NativeDirectTextSessionController(
             val roomId = bootstrap.generalRoomId ?: throw IOException("La sesión de identidad no está disponible")
             val deviceId = bootstrap.deviceId
 
-            val peer = NativeDirectTextPeerManager(
-                context = appContext,
-                currentDeviceId = deviceId,
-                sendRealtimeFrame = { frame -> sendSignalFrame(attempt, frame) },
-                onIncomingTransfer = onIncomingTransfer,
-            )
+            val peer = synchronized(stateLock) {
+                val existing = peerManager
+                if (existing != null) {
+                    if (peerDeviceId != deviceId) {
+                        throw IOException("Cambió la identidad local de forma inesperada")
+                    }
+                    existing
+                } else {
+                    NativeDirectTextPeerManager(
+                        context = appContext,
+                        currentDeviceId = deviceId,
+                        sendRealtimeFrame = ::sendSignalFrame,
+                        onIncomingTransfer = onIncomingTransfer,
+                    ).also {
+                        peerManager = it
+                        peerDeviceId = deviceId
+                    }
+                }
+            }
             val createdSession = ActiveSession(
                 generation = attempt,
                 deviceId = deviceId,
@@ -154,7 +181,7 @@ internal class NativeDirectTextSessionController(
 
             synchronized(stateLock) {
                 if (!isAttemptCurrent(attempt)) {
-                    createdSession.close("Sesión cancelada")
+                    createdSession.closeSocket("Sesión cancelada")
                     return
                 }
                 active = createdSession
@@ -182,10 +209,10 @@ internal class NativeDirectTextSessionController(
             sessionToClose = null
             if (!isSessionCurrent(createdSession)) {
                 createdSocket.close(1000, "Sesión reemplazada")
-                createdSession.peer.close()
+                createdSession.closeSocket("Sesión reemplazada")
             }
         } catch (error: Exception) {
-            sessionToClose?.close("No se pudo abrir la sesión")
+            sessionToClose?.closeSocket("No se pudo abrir la sesión")
             failStartup(
                 attempt,
                 if (error is IOException) error else IOException(error.message ?: "Falló la sesión realtime", error),
@@ -242,7 +269,7 @@ internal class NativeDirectTextSessionController(
         }
     }
 
-    private fun sendSignalFrame(attempt: Long, frame: JSONObject): Boolean {
+    private fun sendSignalFrame(frame: JSONObject): Boolean {
         if (!NativeDirectSignalProtocol.isOutboundSignalFrame(frame)) return false
         val socket = synchronized(stateLock) {
             val current = active
@@ -250,7 +277,6 @@ internal class NativeDirectTextSessionController(
                 closed ||
                 !requested ||
                 current == null ||
-                current.generation != attempt ||
                 current.readySessionId == null
             ) return false
             current.socket.get()
@@ -289,7 +315,8 @@ internal class NativeDirectTextSessionController(
             stateLock.notifyAll()
             current
         }
-        stale?.close("Falló el inicio realtime")
+        stale?.closeSocket("Falló el inicio realtime")
+        peerManager?.resetSession()
     }
 
     private fun failSession(session: ActiveSession, error: IOException) {
@@ -301,7 +328,8 @@ internal class NativeDirectTextSessionController(
             stateLock.notifyAll()
             requested && !closed
         }
-        session.close("Sesión terminada")
+        session.closeSocket("Sesión terminada")
+        peerManager?.resetSession()
         if (shouldReconnect) scheduleReconnect()
     }
 
@@ -344,9 +372,8 @@ internal class NativeDirectTextSessionController(
         var presenceKnown: Boolean = false
         var onlineDeviceIds: Set<String> = emptySet()
 
-        fun close(reason: String) {
+        fun closeSocket(reason: String) {
             socket.getAndSet(null)?.close(1000, reason)
-            peer.close()
         }
     }
 
