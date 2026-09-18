@@ -208,7 +208,6 @@ internal class NativeDirectTextSessionController(
             createdSession.socket.set(createdSocket)
             sessionToClose = null
             if (!isSessionCurrent(createdSession)) {
-                createdSocket.close(1000, "Sesión reemplazada")
                 createdSession.closeSocket("Sesión reemplazada")
             }
         } catch (error: Exception) {
