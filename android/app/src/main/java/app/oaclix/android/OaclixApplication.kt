@@ -52,8 +52,7 @@ class OaclixApplication : Application(), Application.ActivityLifecycleCallbacks 
             !::receiverGate.isInitialized ||
             !receiverGate.isActive()
         ) return
-        directTextController.stop()
-        directTextController.start()
+        directTextController.refresh()
     }
 
     internal fun sendDirectText(
