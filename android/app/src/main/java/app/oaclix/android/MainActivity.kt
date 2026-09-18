@@ -234,6 +234,7 @@ class MainActivity : Activity() {
                 if (isDestroyed || isFinishing) return@runOnUiThread
                 result.onSuccess { roster ->
                     currentDeviceId = identity.getOrCreateSnapshot().deviceId
+                    (application as? OaclixApplication)?.refreshDirectTextSession()
                     renderLinkedDevices(roster)
                     val remoteCount = roster.devices.count { it.id != currentDeviceId }
                     devicesStatus.text = if (remoteCount > 0) {
