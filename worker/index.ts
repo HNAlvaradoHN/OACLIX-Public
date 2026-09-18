@@ -2,7 +2,7 @@ import { cleanupExpiredClipboardData } from './data/clipboardCleanup'
 import { normalizeClipboardCreateSignedPayload } from './data/clipboardCreateRequest'
 import { ClipboardAccessError, ClipboardExpiryError, ClipboardItemConflictError, ClipboardLimitError, createClipboardTextItem, deleteClipboardTextItem, listClipboardChanges, listClipboardTextItems, normalizeClipboardCursor, normalizeClipboardItemId } from './data/clipboardStore'
 import { getDevicePrincipal, listActivePersonRoomIds, listPersonDevices, persistDeviceIdentity, renamePersonDevice, unlinkPersonDevice, type D1DatabaseLike, type DevicePrincipal } from './data/coreStore'
-import { createDeviceLinkCode, consumeDeviceLinkCode, DeviceMergeNotSafeError, InvalidLinkCodeError, LinkCodeTooFrequentError, normalizeLinkCode } from './data/deviceLinkStore'
+import { createDeviceLinkCode, consumeDeviceLinkCode, DeviceMergeNotSafeError, InvalidLinkCodeError, LinkCodeTooFrequentError, normalizeLinkCode, type LinkRealtimeResetTarget } from './data/deviceLinkStore'
 import { canonicalPublicKey, validProofMetadata, verifyBootstrapProof, verifyDeviceActionProof, type DeviceProofEnvelope, type PublicDeviceKey } from './security/deviceProof'
 
 type BootstrapRequest = {
@@ -31,6 +31,8 @@ type Env = {
 const MAX_BODY_LENGTH = 16_384
 const DEVICE_ID_PATTERN = /^dev_[A-Za-z0-9_-]{16,64}$/
 const REALTIME_UNLINK_CONTROL = 'device-unlink-v1'
+const REALTIME_LINK_REFRESH_CONTROL = 'device-link-refresh-v1'
+const BACKEND_BUILD = 'link-realtime-reset-v1'
 
 function json(data: unknown, status = 200) {
   return Response.json(data, {
@@ -111,6 +113,29 @@ async function authenticateDeviceAction<TPayload>(
   } catch {
     return json({ error: 'No se pudo verificar el dispositivo' }, 401)
   }
+}
+
+async function refreshLinkedDeviceRealtime(env: Env, targets: LinkRealtimeResetTarget[]) {
+  if (!env.REALTIME || targets.length === 0) return true
+  let refreshed = true
+
+  for (const target of targets) {
+    try {
+      const stub = env.REALTIME.get(env.REALTIME.idFromName(target.roomId))
+      const response = await stub.fetch(new Request('https://oaclix.internal/realtime/device-link-refresh', {
+        method: 'POST',
+        headers: {
+          'X-OACLIX-Internal-Control': REALTIME_LINK_REFRESH_CONTROL,
+          'X-OACLIX-Device-Id': target.deviceId,
+        },
+      }))
+      if (!response.ok) refreshed = false
+    } catch {
+      refreshed = false
+    }
+  }
+
+  return refreshed
 }
 
 async function invalidateUnlinkedDeviceRealtime(env: Env, roomIds: string[], deviceId: string) {
@@ -235,7 +260,14 @@ async function handleConsumeLink(request: Request, env: Env) {
 
   try {
     const result = await consumeDeviceLinkCode(env.DB!, principal, normalizedCode, Date.now())
-    return json({ version: 1, linked: true, ...result })
+    const realtimeRefreshed = await refreshLinkedDeviceRealtime(env, result.realtimeResetTargets)
+    return json({
+      version: 1,
+      linked: true,
+      personId: result.personId,
+      alreadyLinked: result.alreadyLinked,
+      realtimeRefreshed,
+    })
   } catch (error) {
     if (error instanceof InvalidLinkCodeError) return json({ error: error.message }, 404)
     if (error instanceof DeviceMergeNotSafeError) return json({ error: error.message }, 409)
@@ -508,7 +540,7 @@ export default {
     }
 
     if (url.pathname === '/api/health' && request.method === 'GET') {
-      return json({ ok: true, service: 'oaclix' })
+      return json({ ok: true, service: 'oaclix', backendBuild: BACKEND_BUILD })
     }
 
     return json({ error: 'Ruta no encontrada' }, 404)
