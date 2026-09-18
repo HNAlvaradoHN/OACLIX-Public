@@ -72,7 +72,6 @@ internal class NativeDirectTextSessionController(
             generation to current
         }
         stale?.closeSocket("Sesión realtime actualizada")
-        peerManager?.resetSession()
         executor.execute { connect(attempt) }
     }
 
@@ -90,7 +89,6 @@ internal class NativeDirectTextSessionController(
             current
         }
         stale?.closeSocket("OACLIX en pausa")
-        peerManager?.resetSession()
     }
 
     fun send(
@@ -315,7 +313,6 @@ internal class NativeDirectTextSessionController(
             current
         }
         stale?.closeSocket("Falló el inicio realtime")
-        peerManager?.resetSession()
     }
 
     private fun failSession(session: ActiveSession, error: IOException) {
@@ -328,7 +325,6 @@ internal class NativeDirectTextSessionController(
             requested && !closed
         }
         session.closeSocket("Sesión terminada")
-        peerManager?.resetSession()
         if (shouldReconnect) scheduleReconnect()
     }
 
