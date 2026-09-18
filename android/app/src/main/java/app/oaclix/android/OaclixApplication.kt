@@ -46,6 +46,16 @@ class OaclixApplication : Application(), Application.ActivityLifecycleCallbacks 
         registerActivityLifecycleCallbacks(this)
     }
 
+    internal fun refreshDirectTextSession() {
+        if (
+            !::directTextController.isInitialized ||
+            !::receiverGate.isInitialized ||
+            !receiverGate.isActive()
+        ) return
+        directTextController.stop()
+        directTextController.start()
+    }
+
     internal fun sendDirectText(
         targetDeviceId: String,
         text: String,
