@@ -59,7 +59,7 @@ test('configurar o vincular reinicia la sesión realtime activa', async () => {
   ])
   assert.match(application, /internal fun refreshDirectTextSession\(\)/)
   assert.match(application, /receiverGate\.isActive\(\)/)
-  assert.match(application, /directTextController\.stop\(\)[\s\S]*?directTextController\.start\(\)/)
+  assert.match(application, /directTextController\.refresh\(\)/)
   assert.match(linkActivity, /NativeBackendConfig\.save\(this, input\.text\.toString\(\)\)[\s\S]*?refreshDirectTextSession\(\)/)
   assert.match(linkActivity, /onSuccess = \{ roster ->[\s\S]*?refreshDirectTextSession\(\)[\s\S]*?renderDevices\(roster\)/)
   assert.match(shareReceiver, /NativeBackendConfig\.save\(this, urlInput\.text\.toString\(\)\)[\s\S]*?refreshDirectTextSession\(\)/)
