@@ -1,4 +1,4 @@
-import type { D1DatabaseLike, DevicePrincipal } from './coreStore'
+import { generalRoomId, type D1DatabaseLike, type DevicePrincipal } from './coreStore'
 
 const LINK_TTL_MS = 10 * 60 * 1000
 const MIN_REGENERATE_INTERVAL_MS = 30 * 1000
@@ -12,6 +12,21 @@ type LinkGroupState = {
 }
 
 export type LinkDestination = 'source' | 'target'
+
+export type LinkRealtimeResetTarget = {
+  roomId: string
+  deviceId: string
+}
+
+export function linkRealtimeResetTargets(
+  source: Pick<DevicePrincipal, 'personId' | 'deviceId'>,
+  target: Pick<DevicePrincipal, 'personId' | 'deviceId'>,
+): LinkRealtimeResetTarget[] {
+  return [
+    { roomId: generalRoomId(source.personId), deviceId: source.deviceId },
+    { roomId: generalRoomId(target.personId), deviceId: target.deviceId },
+  ]
+}
 
 export class LinkCodeTooFrequentError extends Error {
   constructor() {
@@ -189,12 +204,17 @@ export async function consumeDeviceLinkCode(
     throw new InvalidLinkCodeError()
   }
 
+  const realtimeResetTargets = linkRealtimeResetTargets(
+    { personId: link.source_person_id, deviceId: link.source_device_id },
+    { personId: target.personId, deviceId: target.deviceId },
+  )
+
   if (link.source_person_id === target.personId) {
     await database
       .prepare('DELETE FROM device_link_codes WHERE code_hash = ?1')
       .bind(codeHash)
       .run()
-    return { personId: target.personId, alreadyLinked: true }
+    return { personId: target.personId, alreadyLinked: true, realtimeResetTargets }
   }
 
   const [sourceState, targetState] = await Promise.all([
@@ -211,7 +231,7 @@ export async function consumeDeviceLinkCode(
       toPersonId: link.source_person_id,
       consumedCodeHash: codeHash,
     })
-    return { personId: link.source_person_id, alreadyLinked: false }
+    return { personId: link.source_person_id, alreadyLinked: false, realtimeResetTargets }
   }
 
   await moveSingleDeviceBetweenGroups(database, {
@@ -220,5 +240,5 @@ export async function consumeDeviceLinkCode(
     toPersonId: target.personId,
     consumedCodeHash: codeHash,
   })
-  return { personId: target.personId, alreadyLinked: false }
+  return { personId: target.personId, alreadyLinked: false, realtimeResetTargets }
 }
